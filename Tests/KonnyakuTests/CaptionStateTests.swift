@@ -78,10 +78,10 @@ struct CaptionStateTests {
     @Test
     func translationRetentionAndDisplay() {
         let state = CaptionState()
-        state.appendTranslation("First.")
-        state.appendTranslation("Second.")
-        state.appendTranslation("Third.")
-        state.appendTranslation("Fourth.")
+        state.appendTranslation("First.", generation: 0)
+        state.appendTranslation("Second.", generation: 1)
+        state.appendTranslation("Third.", generation: 2)
+        state.appendTranslation("Fourth.", generation: 3)
         #expect(state.translationDisplayLines == ["Second.", "Third.", "Fourth."])
     }
 
@@ -91,8 +91,8 @@ struct CaptionStateTests {
         let base = Date(timeIntervalSinceReferenceDate: 0)
         state.appendFinalSource("古い文", at: base)
         state.appendFinalSource("新しい文", at: base.addingTimeInterval(8))
-        state.appendTranslation("Old.", at: base)
-        state.appendTranslation("New.", at: base.addingTimeInterval(8))
+        state.appendTranslation("Old.", generation: 0, at: base)
+        state.appendTranslation("New.", generation: 1, at: base.addingTimeInterval(8))
 
         state.pruneExpired(now: base.addingTimeInterval(CaptionState.lineLifetime + 1))
         #expect(state.sourceLines.map(\.text) == ["新しい文"])
@@ -120,14 +120,29 @@ struct CaptionStateTests {
     @Test
     func volatileTranslationDisplaysAfterFinalizedAndIsReplacedByFinal() {
         let state = CaptionState()
-        state.appendTranslation("First.")
-        state.setVolatileTranslation("typing...", generation: state.volatileGeneration)
+        state.appendTranslation("First.", generation: 0)
+        let generation = state.volatileGeneration
+        state.setVolatileTranslation("typing...", generation: generation)
         #expect(state.translationDisplayLines == ["First.", "typing..."])
 
-        // 文の確定 (世代が進む) 後に届いた確定訳が、旧世代の追従訳を置き換える
+        // 文の確定 (世代が進む) 後に届いた同世代の確定訳が追従訳を置き換える
         state.appendFinalSource("確定文")
-        state.appendTranslation("Second.")
+        state.appendTranslation("Second.", generation: generation)
         #expect(state.translationDisplayLines == ["First.", "Second."])
+    }
+
+    // 文確定の瞬間に追従訳を消さず、自分の確定訳の到着まで placeholder として残す
+    // (確定〜確定訳到着の間に下段が一瞬空になる regression の防止)
+    @Test
+    func volatileTranslationPersistsAcrossFinalizeUntilRealTranslationArrives() {
+        let state = CaptionState()
+        let generation = state.volatileGeneration
+        state.setVolatileTranslation("half sentence...", generation: generation)
+        state.appendFinalSource("確定文")
+        #expect(state.translationDisplayLines == ["half sentence..."])
+
+        state.appendTranslation("Real translation.", generation: generation)
+        #expect(state.translationDisplayLines == ["Real translation."])
     }
 
     // 前の文の確定訳が遅れて到着しても、既に表示中の次の文の追従訳は消さない
@@ -136,12 +151,48 @@ struct CaptionStateTests {
     func delayedFinalTranslationKeepsNextSentenceVolatileTranslation() {
         let state = CaptionState()
         // 文 A が確定して世代が進み、文 B の追従訳が表示されている
+        let generationA = state.volatileGeneration
         state.appendFinalSource("文A")
         state.setVolatileTranslation("B typing...", generation: state.volatileGeneration)
 
         // 文 A の確定訳が遅れて到着
-        state.appendTranslation("A final.")
+        state.appendTranslation("A final.", generation: generationA)
         #expect(state.translationDisplayLines == ["A final.", "B typing..."])
+    }
+
+    // 文 B の確定後に文 A の確定訳が届いても B の追従訳は残り、B 自身の確定訳で置き換わる
+    // (世代差の有無ではなく「同世代か」で置き換え対象を判定する regression 防止)
+    @Test
+    func delayedFinalTranslationAfterNextSentenceFinalizedKeepsItsPlaceholder() {
+        let state = CaptionState()
+        let generationA = state.volatileGeneration
+        state.appendFinalSource("文A")
+        let generationB = state.volatileGeneration
+        state.setVolatileTranslation("B typing...", generation: generationB)
+        state.appendFinalSource("文B")
+
+        state.appendTranslation("A final.", generation: generationA)
+        #expect(state.translationDisplayLines == ["A final.", "B typing..."])
+
+        state.appendTranslation("B final.", generation: generationB)
+        #expect(state.translationDisplayLines == ["A final.", "B final."])
+    }
+
+    // 句読点のみ等で final を捨てたセグメントも世代が進み、話し中表示と追従訳が消え、
+    // in-flight の追従訳も受理されない (確定訳が来ないため残すと 10 秒残骸になる)
+    @Test
+    func discardVolatileSegmentClearsVolatileAndRejectsInFlight() {
+        let state = CaptionState()
+        let generation = state.volatileGeneration
+        state.setVolatileSource("話し中")
+        state.setVolatileTranslation("typing...", generation: generation)
+
+        state.discardVolatileSegment()
+        #expect(state.sourceDisplayLines.isEmpty)
+        #expect(state.translationDisplayLines.isEmpty)
+
+        state.setVolatileTranslation("stale", generation: generation)
+        #expect(state.translationDisplayLines.isEmpty)
     }
 
     // 訳している間に文が確定した (世代が進んだ) 追従訳は stale として捨てる。
@@ -176,7 +227,7 @@ struct CaptionStateTests {
         let state = CaptionState()
         state.setVolatileSource("話し中")
         state.appendFinalSource("確定文")
-        state.appendTranslation("Translated.")
+        state.appendTranslation("Translated.", generation: 0)
         state.setVolatileTranslation("typing...", generation: state.volatileGeneration)
         state.reset()
         #expect(state.sourceDisplayLines.isEmpty)

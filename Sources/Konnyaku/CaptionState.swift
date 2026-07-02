@@ -68,6 +68,16 @@ final class CaptionState {
         }
     }
 
+    // 表示に値する確定文が無いままセグメントが終わった (句読点のみの final を捨てた・
+    // 停止した) 場合の後始末。世代を進めて in-flight の追従訳を無効化し、
+    // 対応する確定訳が来ない追従訳の残骸も消す
+    func discardVolatileSegment() {
+        volatileSource = ""
+        volatileTranslation = ""
+        volatileGeneration += 1
+        volatileTranslationGeneration = -1
+    }
+
     // 対象行が既に流れた場合に無関係な行を上書きしない guard。補正は FIFO 処理のため
     // 重複テキストは最古の一致行が対象。addedAt 更新は差し替え直後の失効を防ぐ
     func replaceFinalSource(_ old: String, with new: String, at now: Date = Date()) {
@@ -76,11 +86,13 @@ final class CaptionState {
         sourceLines[index].addedAt = now
     }
 
-    func appendTranslation(_ text: String, at now: Date = Date()) {
-        // 確定訳は自分の文の追従訳のみ置き換える。現行世代 (次の文) の追従訳は、
-        // 前の文の確定訳が遅れて到着した場合の巻き添えクリア (flicker) を防ぐため残す
-        if volatileTranslationGeneration != volatileGeneration {
+    // generation は「この確定訳の文の volatile が刻まれていた世代」(appendFinalSource が
+    // 進める前の値)。同世代の追従訳のみ置き換え、別の文の確定訳が遅れて到着した場合の
+    // 巻き添えクリア (flicker) を防ぐ
+    func appendTranslation(_ text: String, generation: Int, at now: Date = Date()) {
+        if volatileTranslationGeneration == generation {
             volatileTranslation = ""
+            volatileTranslationGeneration = -1
         }
         translatedLines.append(Line(text: text, addedAt: now))
         if translatedLines.count > Self.maxTranslatedLines {
