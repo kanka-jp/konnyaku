@@ -1,0 +1,41 @@
+"menu.start" = "Start Subtitles";
+"menu.stop" = "Stop Subtitles";
+"menu.move_overlay" = "Move Overlay (Drag)";
+"menu.font_size" = "Text Size";
+"menu.input_language" = "Spoken Language";
+"menu.output_language" = "Translation Language";
+"menu.correction" = "Refine Transcription with AI";
+"menu.edit_vocabulary" = "Edit Custom Vocabulary…";
+"menu.translation_setup" = "Set Up Translation Model…";
+"menu.quit" = "Quit Konnyaku";
+
+"font.small" = "Small";
+"font.regular" = "Regular";
+"font.large" = "Large";
+
+"status.mic_denied" = "Microphone access is not allowed (System Settings > Privacy & Security)";
+"status.model_missing" = "The translation model is not installed";
+"status.unsupported_pair" = "Translation is not available for this language pair";
+"status.preparing" = "Preparing the speech recognition model…";
+"status.start_failed" = "Failed to start";
+"status.recognition_error" = "Recognition error";
+"status.translation_error" = "Translation error";
+"status.vocabulary_error" = "Could not open the custom vocabulary file";
+
+"correction.unavailable.intelligence_off" = "Unavailable because Apple Intelligence is turned off";
+"correction.unavailable.device" = "This device does not support Apple Intelligence";
+"correction.unavailable.not_ready" = "The Apple Intelligence model is not ready yet";
+
+"setup.title" = "Translation Model Setup";
+"setup.message.initial" = "Download the translation model for the selected languages.";
+"setup.message.done" = "The translation model has been downloaded. You can start subtitles now.";
+"setup.message.failed" = "Download failed";
+"setup.download" = "Download";
+"setup.close" = "Close";
+
+"overlay.hint" = "Drag to move → turn off \"Move Overlay\" in the menu to lock";
+
+"error.speech_unsupported" = "Speech recognition is not available for the selected language";
+"error.audio_format" = "Could not get an audio format compatible with speech recognition";
+"error.audio_converter" = "Could not initialize microphone format conversion";
+"error.transcriber_not_prepared" = "The speech recognition engine is not prepared";

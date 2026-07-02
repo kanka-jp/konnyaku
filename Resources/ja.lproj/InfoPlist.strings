@@ -1,0 +1,2 @@
+"NSMicrophoneUsageDescription" = "Konnyaku は発話を書き起こし・翻訳してライブ字幕を表示するためにマイクを使用します。";
+"NSSpeechRecognitionUsageDescription" = "Konnyaku はライブ字幕表示のために発話をオンデバイスで書き起こします。";

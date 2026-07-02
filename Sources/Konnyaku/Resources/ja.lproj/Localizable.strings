@@ -1,0 +1,41 @@
+"menu.start" = "字幕を開始";
+"menu.stop" = "字幕を停止";
+"menu.move_overlay" = "オーバーレイを移動 (ドラッグ)";
+"menu.font_size" = "文字サイズ";
+"menu.input_language" = "入力言語 (音声)";
+"menu.output_language" = "出力言語 (翻訳)";
+"menu.correction" = "AI で文字起こしを補正";
+"menu.edit_vocabulary" = "カスタム語彙を編集…";
+"menu.translation_setup" = "翻訳モデルのセットアップ…";
+"menu.quit" = "Konnyaku を終了";
+
+"font.small" = "小";
+"font.regular" = "標準";
+"font.large" = "大";
+
+"status.mic_denied" = "マイクへのアクセスが許可されていません (システム設定 > プライバシーとセキュリティ)";
+"status.model_missing" = "翻訳言語モデルが未インストールです";
+"status.unsupported_pair" = "この言語ペアの翻訳は利用できません";
+"status.preparing" = "音声認識モデルを準備中…";
+"status.start_failed" = "開始に失敗しました";
+"status.recognition_error" = "認識エラー";
+"status.translation_error" = "翻訳エラー";
+"status.vocabulary_error" = "カスタム語彙ファイルを開けませんでした";
+
+"correction.unavailable.intelligence_off" = "Apple Intelligence が無効のため利用できません";
+"correction.unavailable.device" = "このデバイスは Apple Intelligence 非対応です";
+"correction.unavailable.not_ready" = "Apple Intelligence モデルの準備中です";
+
+"setup.title" = "翻訳モデルのセットアップ";
+"setup.message.initial" = "選択中の言語ペアの翻訳モデルをダウンロードします。";
+"setup.message.done" = "翻訳モデルのダウンロードが完了しました。字幕を開始できます。";
+"setup.message.failed" = "ダウンロードに失敗しました";
+"setup.download" = "ダウンロード";
+"setup.close" = "閉じる";
+
+"overlay.hint" = "ドラッグで移動 → メニューの「オーバーレイを移動」を OFF で固定";
+
+"error.speech_unsupported" = "選択中の言語の音声認識は利用できません";
+"error.audio_format" = "音声認識に適合するオーディオフォーマットを取得できませんでした";
+"error.audio_converter" = "マイク入力のフォーマット変換を初期化できませんでした";
+"error.transcriber_not_prepared" = "音声認識エンジンが準備されていません";

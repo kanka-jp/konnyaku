@@ -1,0 +1,2 @@
+"NSMicrophoneUsageDescription" = "Konnyaku transcribes and translates your speech to show live subtitles.";
+"NSSpeechRecognitionUsageDescription" = "Konnyaku transcribes your speech on-device to show live subtitles.";
