@@ -1,20 +1,25 @@
 "menu.start" = "字幕を開始";
 "menu.stop" = "字幕を停止";
+"menu.cancel_download" = "ダウンロードを中止";
 "menu.move_overlay" = "オーバーレイを移動 (ドラッグ)";
 "menu.font_size" = "文字サイズ";
 "menu.input_language" = "入力言語 (音声)";
 "menu.output_language" = "出力言語 (翻訳)";
+"menu.translation_strategy" = "翻訳エンジン";
 "menu.correction" = "AI で文字起こしを補正";
 "menu.edit_vocabulary" = "カスタム語彙を編集…";
-"menu.translation_setup" = "翻訳モデルのセットアップ…";
 "menu.quit" = "Konnyaku を終了";
+
+"strategy.low_latency" = "速度優先 (lowLatency)";
+"strategy.high_fidelity" = "品質優先 (highFidelity)";
 
 "font.small" = "小";
 "font.regular" = "標準";
 "font.large" = "大";
 
 "status.mic_denied" = "マイクへのアクセスが許可されていません (システム設定 > プライバシーとセキュリティ)";
-"status.model_missing" = "翻訳言語モデルが未インストールです";
+"status.model_downloading" = "翻訳モデルをダウンロード中… (完了すると自動で開始します)";
+"status.model_download_failed" = "翻訳モデルのダウンロードに失敗しました";
 "status.unsupported_pair" = "この言語ペアの翻訳は利用できません";
 "status.preparing" = "音声認識モデルを準備中…";
 "status.start_failed" = "開始に失敗しました";
@@ -25,13 +30,6 @@
 "correction.unavailable.intelligence_off" = "Apple Intelligence が無効のため利用できません";
 "correction.unavailable.device" = "このデバイスは Apple Intelligence 非対応です";
 "correction.unavailable.not_ready" = "Apple Intelligence モデルの準備中です";
-
-"setup.title" = "翻訳モデルのセットアップ";
-"setup.message.initial" = "選択中の言語ペアの翻訳モデルをダウンロードします。";
-"setup.message.done" = "翻訳モデルのダウンロードが完了しました。字幕を開始できます。";
-"setup.message.failed" = "ダウンロードに失敗しました";
-"setup.download" = "ダウンロード";
-"setup.close" = "閉じる";
 
 "overlay.hint" = "ドラッグで移動 → メニューの「オーバーレイを移動」を OFF で固定";
 

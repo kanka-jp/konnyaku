@@ -11,11 +11,14 @@ final class AppController {
     let languages = LanguageSettings()
 
     static let correctionEnabledKey = "correction.enabled"
+    static let preferLowLatencyTranslationKey = "translation.preferLowLatency"
 
     private let overlay = OverlayController()
     private var pipeline: CaptionPipeline?
     private(set) var isBusy = false
-    private(set) var needsTranslationSetup = false
+    // 非 nil の間、KonnyakuApp の translationTask がモデル DL を実行する
+    private(set) var modelDownloadConfiguration: TranslationSession.Configuration?
+    var isDownloadingModel: Bool { modelDownloadConfiguration != nil }
     private var isStarting = false
     private var pendingLanguageRestart = false
 
@@ -25,8 +28,23 @@ final class AppController {
         }
     }
 
+    var preferLowLatencyTranslation: Bool {
+        didSet {
+            UserDefaults.standard.set(
+                preferLowLatencyTranslation, forKey: Self.preferLowLatencyTranslationKey)
+        }
+    }
+
     init() {
         correctionEnabled = UserDefaults.standard.bool(forKey: Self.correctionEnabledKey)
+        // 未設定 (初回) は速度優先を default にする。bool(forKey:) は未設定と false を
+        // 区別できないため object(forKey:) で判定する
+        if let saved = UserDefaults.standard.object(forKey: Self.preferLowLatencyTranslationKey)
+            as? Bool {
+            preferLowLatencyTranslation = saved
+        } else {
+            preferLowLatencyTranslation = true
+        }
     }
 
     func loadLanguages() async {
@@ -35,6 +53,11 @@ final class AppController {
 
     func setCorrectionEnabled(_ enabled: Bool) {
         correctionEnabled = enabled
+        scheduleLanguageRestart()
+    }
+
+    func setPreferLowLatencyTranslation(_ enabled: Bool) {
+        preferLowLatencyTranslation = enabled
         scheduleLanguageRestart()
     }
 
@@ -62,14 +85,40 @@ final class AppController {
         scheduleLanguageRestart()
     }
 
-    func translationSetupCompleted() {
-        needsTranslationSetup = false
+    // KonnyakuApp の translationTask (prepareTranslation 実行元) から結果を受け取る。
+    // DL 中の設定変更で configuration が差し替わった後に旧 task の完了が届くことが
+    // あるため、発火時の configuration と現在値の一致を guard する (stale 上書き防止)
+    func modelDownloadSucceeded(for configuration: TranslationSession.Configuration?) {
+        guard configuration == modelDownloadConfiguration else { return }
+        debugLog("model download done, auto-starting captions")
+        modelDownloadConfiguration = nil
+        state.statusMessage = nil
+        // nil 代入は translationTask (この通知の呼び出し元) 自身を cancel するため、
+        // 自動開始はその cancel を継承しない独立 Task で行う
+        Task {
+            await start()
+        }
+    }
+
+    func modelDownloadFailed(_ error: Error, for configuration: TranslationSession.Configuration?) {
+        guard configuration == modelDownloadConfiguration else { return }
+        debugLog("model download failed: \(error)")
+        modelDownloadConfiguration = nil
+        state.statusMessage = "\(t("status.model_download_failed")): \(error.localizedDescription)"
+    }
+
+    func cancelModelDownload() {
+        debugLog("model download cancelled by user")
+        modelDownloadConfiguration = nil
         state.statusMessage = nil
     }
 
     func toggle() async {
         if state.isRunning {
             await stop()
+        } else if isDownloadingModel {
+            // DL 中の再押下は中止として扱う (再開扱いで進捗を捨てる誤操作を防ぐ)
+            cancelModelDownload()
         } else {
             await start()
         }
@@ -85,7 +134,8 @@ final class AppController {
             consumePendingLanguageRestart()
         }
         state.statusMessage = nil
-        needsTranslationSetup = false
+        // 開始し直すたびに最新の言語・strategy 設定で DL 要否を再判定する
+        modelDownloadConfiguration = nil
 
         // start 全体で同じ設定を使う (途中の変更は pendingLanguageRestart 経由の
         // 再起動で反映し、チェック済み設定と起動設定の食い違いを防ぐ)
@@ -99,6 +149,7 @@ final class AppController {
             return
         }
 
+        var useLowLatencyTranslation = false
         if translationEnabled {
             // 実翻訳セッション (CaptionPipeline の worker) と同じ resolvePair 済みペアで
             // 可用性を判定し、チェック対象とセッション対象の不一致を防ぐ
@@ -106,12 +157,29 @@ final class AppController {
                 input: inputLocale.language,
                 output: outputLanguage
             )
-            switch await TranslationSupport.availability(from: pair.source, to: pair.target) {
+            let plan = await TranslationSupport.plan(
+                from: pair.source,
+                to: pair.target,
+                preferLowLatency: preferLowLatencyTranslation
+            )
+            useLowLatencyTranslation = plan.usesLowLatency
+            switch plan.status {
             case .installed:
                 break
             case .supported:
-                state.statusMessage = t("status.model_missing")
-                needsTranslationSetup = true
+                // popup を挟まず自動 DL に入る。進捗はメニューバーアイコンと
+                // status 文言で表現し、完了後は modelDownloadSucceeded が自動開始する
+                debugLog("model not installed, scheduling auto-download (lowLatency: \(plan.usesLowLatency))")
+                state.statusMessage = t("status.model_downloading")
+                var configuration = TranslationSupport.makeSetupConfiguration(
+                    source: pair.source,
+                    target: pair.target,
+                    lowLatency: plan.usesLowLatency
+                )
+                // 失敗後の再試行等で前回と同値の configuration は translationTask が
+                // 再発火しないため、version を進めて常に新しい値として扱わせる
+                configuration.invalidate()
+                modelDownloadConfiguration = configuration
                 return
             case .unsupported:
                 state.statusMessage = t("status.unsupported_pair")
@@ -136,6 +204,7 @@ final class AppController {
                 inputLocale: inputLocale,
                 outputLanguage: outputLanguage,
                 translationEnabled: translationEnabled,
+                useLowLatencyTranslation: useLowLatencyTranslation,
                 correctionEnabled: correctionEnabled,
                 contextualTerms: VocabularyStore.load()
             )
@@ -171,20 +240,26 @@ final class AppController {
         }
     }
 
-    // start の全終了経路で繰り越しを消費する。早期 return 時 (isRunning false) は
-    // 再起動せず破棄し、次回の正常 start 直後に無駄な stop→start が走るのを防ぐ
+    // start の全終了経路で繰り越しを消費する。実行可否は restartIfRunning に一本化する
+    // (稼働中と DL 中は新設定でやり直し、mic 拒否等の素の早期 return では何もしない)
     private func consumePendingLanguageRestart() {
         guard pendingLanguageRestart else { return }
         pendingLanguageRestart = false
-        guard state.isRunning else { return }
         Task {
             await restartIfRunning()
         }
     }
 
     private func restartIfRunning() async {
-        guard state.isRunning else { return }
-        await stop()
-        await start()
+        if state.isRunning {
+            await stop()
+            await start()
+            return
+        }
+        // モデル DL 中の言語・strategy 変更は、旧設定のアセットを待たず新設定で
+        // DL からやり直す (start 冒頭の configuration クリアが旧 task を cancel する)
+        if isDownloadingModel {
+            await start()
+        }
     }
 }

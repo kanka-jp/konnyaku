@@ -26,8 +26,35 @@ func debugLog(_ message: String) {
 }
 
 enum TranslationSupport {
-    static func availability(from source: Locale.Language, to target: Locale.Language) async -> LanguageAvailability.Status {
-        await LanguageAvailability().status(from: source, to: target)
+    static var isLowLatencyStrategyAvailable: Bool {
+        if #available(macOS 26.4, *) { return true }
+        return false
+    }
+
+    // lowLatency 戦略 (macOS 26.4+) は速度優先の別モデル。ユーザー選択を尊重しつつ、
+    // ペア未対応・旧 OS では従来の highFidelity へ自動 fallback する
+    struct Plan {
+        let status: LanguageAvailability.Status
+        let usesLowLatency: Bool
+    }
+
+    static func plan(
+        from source: Locale.Language,
+        to target: Locale.Language,
+        preferLowLatency: Bool
+    ) async -> Plan {
+        if preferLowLatency, #available(macOS 26.4, *) {
+            let status = await LanguageAvailability(preferredStrategy: .lowLatency)
+                .status(from: source, to: target)
+            debugLog("lowLatency availability: \(String(describing: status))")
+            if status != .unsupported {
+                return Plan(status: status, usesLowLatency: true)
+            }
+        }
+        return Plan(
+            status: await LanguageAvailability().status(from: source, to: target),
+            usesLowLatency: false
+        )
     }
 
     static func supportedTargetLanguages() async -> [Locale.Language] {
@@ -49,8 +76,30 @@ enum TranslationSupport {
         return (source, target)
     }
 
-    static func makeSession(source: Locale.Language, target: Locale.Language) -> TranslationSession {
-        TranslationSession(installedSource: source, target: target)
+    static func makeSession(
+        source: Locale.Language,
+        target: Locale.Language,
+        lowLatency: Bool
+    ) -> TranslationSession {
+        if lowLatency, #available(macOS 26.4, *) {
+            return TranslationSession(
+                installedSource: source, target: target, preferredStrategy: .lowLatency)
+        }
+        return TranslationSession(installedSource: source, target: target)
+    }
+
+    // モデル DL 用の translationTask に渡す。実セッションと同じ strategy の Configuration に
+    // しないと prepareTranslation が別戦略のアセットを DL してしまう
+    static func makeSetupConfiguration(
+        source: Locale.Language,
+        target: Locale.Language,
+        lowLatency: Bool
+    ) -> TranslationSession.Configuration {
+        if lowLatency, #available(macOS 26.4, *) {
+            return TranslationSession.Configuration(
+                source: source, target: target, preferredStrategy: .lowLatency)
+        }
+        return TranslationSession.Configuration(source: source, target: target)
     }
 
     // zh-Hans / zh-Hant のように script で分かれる変異形を region より先に区別する

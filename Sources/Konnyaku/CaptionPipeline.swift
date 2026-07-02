@@ -31,6 +31,7 @@ final class CaptionPipeline {
         inputLocale: Locale,
         outputLanguage: Locale.Language,
         translationEnabled: Bool,
+        useLowLatencyTranslation: Bool,
         correctionEnabled: Bool,
         contextualTerms: [String]
     ) async throws {
@@ -51,7 +52,11 @@ final class CaptionPipeline {
         }
 
         if translationEnabled {
-            startTranslationWorker(inputLanguage: inputLocale.language, outputLanguage: outputLanguage)
+            startTranslationWorker(
+                inputLanguage: inputLocale.language,
+                outputLanguage: outputLanguage,
+                lowLatency: useLowLatencyTranslation
+            )
         }
         // 補正プロンプトの few-shot・フィラー語彙・語尾復元は日本語専用のため、
         // 他言語入力では worker を起動せず誤った書き換えを避ける
@@ -174,7 +179,11 @@ final class CaptionPipeline {
         }
     }
 
-    private func startTranslationWorker(inputLanguage: Locale.Language, outputLanguage: Locale.Language) {
+    private func startTranslationWorker(
+        inputLanguage: Locale.Language,
+        outputLanguage: Locale.Language,
+        lowLatency: Bool
+    ) {
         // ライブ字幕では滞留した古い文を訳す価値がないため、翻訳が追いつかない場合は
         // 新しい文を優先して古い待ち行列を捨てる (無制限バッファによる遅延蓄積も防ぐ)
         let (sourceStream, sourceContinuation) = AsyncStream.makeStream(
@@ -188,7 +197,9 @@ final class CaptionPipeline {
         let state = self.state
         translationTask = Task.detached {
             let pair = await TranslationSupport.resolvePair(input: inputLanguage, output: outputLanguage)
-            let session = TranslationSupport.makeSession(source: pair.source, target: pair.target)
+            debugLog("translation strategy: \(lowLatency ? "lowLatency" : "highFidelity")")
+            let session = TranslationSupport.makeSession(
+                source: pair.source, target: pair.target, lowLatency: lowLatency)
             do {
                 // モデルを事前ロードして初回翻訳の待ちを短縮する
                 let prepareStart = ContinuousClock.now
