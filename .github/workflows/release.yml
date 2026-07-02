@@ -27,7 +27,7 @@ jobs:
           cat > /tmp/release-notes.md <<'EOF'
           Homebrew でインストールできます: `brew install --cask kanka-jp/tap/konnyaku`
 
-          ad-hoc 署名のため、初回起動はシステム設定 → プライバシーとセキュリティ → 「このまま開く」での許可 (または `xattr -dr com.apple.quarantine Konnyaku.app`) が必要です。
+          ad-hoc 署名のため、初回起動はシステム設定 → プライバシーとセキュリティ → 「このまま開く」での許可 (または `xattr -dr com.apple.quarantine /Applications/Konnyaku.app`) が必要です。
           EOF
       - name: Create GitHub Release
         env:
