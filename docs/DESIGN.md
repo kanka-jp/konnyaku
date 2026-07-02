@@ -53,7 +53,7 @@ MenuBarExtra: Start / Stop / 言語選択 / Quit
 | `TranslationSupport` | TranslationSession の生成、言語ペアの変異形解決 (resolvePair)、可用性チェック (文単位の翻訳 worker は `CaptionPipeline` 内) |
 | `CaptionPipeline` | 上記の接続、翻訳 worker、字幕状態 (`CaptionState`) の更新 |
 | `OverlayController` / `SubtitleView` | オーバーレイ window (位置記憶・移動モード) と 2 段字幕の描画 |
-| `LanguageSettings` / `OverlaySettings` | 言語・表示設定の保持と UserDefaults 永続化 |
+| `LanguageSettings` / `OverlaySettings` / `ConfigStore` | 言語・表示設定の保持と `~/.config/konnyaku/config` (key = value プレーンテキスト、XDG_CONFIG_HOME 尊重) への永続化。オーバーレイ位置のみディスプレイ構成依存の状態として UserDefaults |
 | `KonnyakuApp` / `AppController` | MenuBarExtra、Start/Stop、権限・モデル未インストール時の誘導 |
 
 ### オーバーレイの要件
@@ -81,11 +81,11 @@ SwiftPM executable + `make app` で `.app` bundle を組み立てる (Xcode プ�
 3. final 確定文の翻訳と下段表示 (直近数行)
 4. クリック透過・全 Space 追従オーバーレイ
 5. 音声認識モデル・翻訳言語モデル未インストール時の検出と誘導 (セットアップウィンドウからダウンロード)
-6. 入力言語 / 出力言語のメニュー選択 (SpeechTranscriber.supportedLocales / LanguageAvailability.supportedLanguages から動的列挙、UserDefaults 永続化、実行中の変更はパイプライン自動再起動、入力 == 出力言語なら翻訳 skip で書き起こしのみ)
+6. 入力言語 / 出力言語のメニュー選択 (SpeechTranscriber.supportedLocales / LanguageAvailability.supportedLanguages から動的列挙、`~/.config/konnyaku/config` へ永続化、実行中の変更はパイプライン自動再起動、入力 == 出力言語なら翻訳 skip で書き起こしのみ)
 7. オーバーレイの D&D 位置調整 (メニューの移動トグルでクリック透過と切り替え、位置は記憶して復元)
 8. 文字サイズ選択 (小 / 標準 / 大)
 9. UI の i18n (en / ja の localized resources)
-10. 認識精度の改善: `.fastResults` は維持 (外すと volatile 字幕の初出が数秒遅れライブ字幕が成立しない。確定精度の差 +0.6pp は AI 補正層が吸収)、カスタム語彙 (`AnalysisContext.contextualStrings` + AI 補正プロンプトへ注入、`~/Library/Application Support/Konnyaku/vocabulary.txt` に 1 行 1 語、上限 100 語)
+10. 認識精度の改善: `.fastResults` は維持 (外すと volatile 字幕の初出が数秒遅れライブ字幕が成立しない。確定精度の差 +0.6pp は AI 補正層が吸収)、カスタム語彙 (`AnalysisContext.contextualStrings` + AI 補正プロンプトへ注入、`~/.config/konnyaku/vocabulary.txt` に 1 行 1 語、上限 100 語)
 11. AI 補正 (opt-in トグル): 確定文はまず原文を即表示し、オンデバイス LLM (FoundationModels / Apple Intelligence) の校正完了後にまだ表示中なら差し替える (翻訳へは校正後テキストを流す)。`SystemLanguageModel.default.isAvailable` でゲートし、cancel・失敗時は原文 fallback。順序保証のため専用 worker で逐次処理。プロンプト・語尾復元が日本語専用のため日本語入力時のみ有効
 
 含まない (実需要が出てから):

@@ -1,15 +1,13 @@
 import Foundation
 
 // 音声認識の contextualStrings と AI 補正プロンプトの両方へ注入するカスタム語彙
-// (専門用語・固有名詞) を Application Support 配下のプレーンテキストで管理する
+// (専門用語・固有名詞) を ~/.config/konnyaku 配下のプレーンテキストで管理する
 enum VocabularyStore {
     // contextualStrings の phrase biasing が有効に効く実用上限 (これ以上は先頭を優先)
     static let maxTerms = 100
 
     static var fileURL: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Konnyaku", isDirectory: true)
-            .appendingPathComponent("vocabulary.txt")
+        ConfigStore.directoryURL.appendingPathComponent("vocabulary.txt")
     }
 
     static func load() -> [String] {

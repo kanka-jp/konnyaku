@@ -6,18 +6,15 @@ import Translation
 @MainActor
 @Observable
 final class LanguageSettings {
-    static let inputKey = "language.input"
-    static let outputKey = "language.output"
-
     var inputLocaleIdentifier: String {
         didSet {
-            UserDefaults.standard.set(inputLocaleIdentifier, forKey: Self.inputKey)
+            ConfigStore.set(inputLocaleIdentifier, forKey: ConfigStore.inputLanguageKey)
         }
     }
 
     var outputLanguageIdentifier: String {
         didSet {
-            UserDefaults.standard.set(outputLanguageIdentifier, forKey: Self.outputKey)
+            ConfigStore.set(outputLanguageIdentifier, forKey: ConfigStore.outputLanguageKey)
         }
     }
 
@@ -37,9 +34,9 @@ final class LanguageSettings {
         inputLocale.language.languageCode != outputLanguage.languageCode
     }
 
-    init() {
-        inputLocaleIdentifier = UserDefaults.standard.string(forKey: Self.inputKey) ?? "ja-JP"
-        outputLanguageIdentifier = UserDefaults.standard.string(forKey: Self.outputKey) ?? "en-US"
+    init(config: [String: String]) {
+        inputLocaleIdentifier = config[ConfigStore.inputLanguageKey] ?? "ja-JP"
+        outputLanguageIdentifier = config[ConfigStore.outputLanguageKey] ?? "en-US"
     }
 
     func loadAvailable() async {
