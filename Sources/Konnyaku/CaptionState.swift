@@ -15,12 +15,19 @@ final class CaptionState {
     }
 
     private(set) var volatileSource = ""
+    private(set) var volatileTranslation = ""
     private(set) var sourceLines: [Line] = []
     private(set) var translatedLines: [Line] = []
     var isRunning = false
     var statusMessage: String?
 
     private var volatileUpdatedAt = Date.distantPast
+    private var volatileTranslationUpdatedAt = Date.distantPast
+    // 文の切り替わり (確定) を跨いで届いた追従訳を破棄するための世代番号
+    private(set) var volatileGeneration = 0
+    // 表示中の追従訳がどの世代の文のものか (-1 は不在)。確定訳の遅延到着が
+    // 次の文の追従訳を巻き添えクリアしないための判定に使う
+    private var volatileTranslationGeneration = -1
 
     var sourceDisplayLines: [String] {
         var lines = sourceLines.map(\.text)
@@ -31,7 +38,11 @@ final class CaptionState {
     }
 
     var translationDisplayLines: [String] {
-        translatedLines.map(\.text)
+        var lines = translatedLines.map(\.text)
+        if !volatileTranslation.isEmpty {
+            lines.append(volatileTranslation)
+        }
+        return lines
     }
 
     func setVolatileSource(_ text: String, at now: Date = Date()) {
@@ -39,12 +50,43 @@ final class CaptionState {
         volatileUpdatedAt = now
     }
 
+    // 話し中テキストの追従訳。generation が現在と異なる (訳している間に文が確定した)
+    // 場合は stale として捨て、確定訳の後に古い追従訳が再表示されるのを防ぐ
+    func setVolatileTranslation(_ text: String, generation: Int, at now: Date = Date()) {
+        guard generation == volatileGeneration else { return }
+        volatileTranslation = text
+        volatileTranslationGeneration = generation
+        volatileTranslationUpdatedAt = now
+    }
+
     func appendFinalSource(_ text: String, at now: Date = Date()) {
         volatileSource = ""
+        volatileGeneration += 1
         sourceLines.append(Line(text: text, addedAt: now))
         if sourceLines.count > Self.maxSourceLines {
             sourceLines.removeFirst(sourceLines.count - Self.maxSourceLines)
         }
+    }
+
+    // 表示に値する確定文が無いままセグメントが終わった (句読点のみの final を捨てた)
+    // 場合の後始末。世代を進めて in-flight の追従訳を無効化する。旧世代の placeholder
+    // (確定訳待ち) は消さない — 確定訳が届いて置き換わるため、消すと到着まで下段が空く
+    func discardVolatileSegment() {
+        volatileSource = ""
+        if volatileTranslationGeneration == volatileGeneration {
+            volatileTranslation = ""
+            volatileTranslationGeneration = -1
+        }
+        volatileGeneration += 1
+    }
+
+    // 停止時の後始末。worker が全て止まり確定訳・追従訳とも今後届かないため、
+    // 旧世代の placeholder も含め volatile 表示を全て消す
+    func clearVolatile() {
+        volatileSource = ""
+        volatileTranslation = ""
+        volatileGeneration += 1
+        volatileTranslationGeneration = -1
     }
 
     // 対象行が既に流れた場合に無関係な行を上書きしない guard。補正は FIFO 処理のため
@@ -55,7 +97,15 @@ final class CaptionState {
         sourceLines[index].addedAt = now
     }
 
-    func appendTranslation(_ text: String, at now: Date = Date()) {
+    // generation は「この確定訳の文の volatile が刻まれていた世代」(appendFinalSource が
+    // 進める前の値)。自分の文以前の追従訳のみ置き換え、後の文 (現在話し中) の追従訳の
+    // 巻き添えクリア (flicker) を防ぐ。自分より古い placeholder も消す — 確定訳は文順に
+    // 届くため、それは対応する確定訳が buffer 溢れで欠落した孤児で、残すと表示され続ける
+    func appendTranslation(_ text: String, generation: Int, at now: Date = Date()) {
+        if volatileTranslationGeneration <= generation {
+            volatileTranslation = ""
+            volatileTranslationGeneration = -1
+        }
         translatedLines.append(Line(text: text, addedAt: now))
         if translatedLines.count > Self.maxTranslatedLines {
             translatedLines.removeFirst(translatedLines.count - Self.maxTranslatedLines)
@@ -69,6 +119,9 @@ final class CaptionState {
         if !volatileSource.isEmpty && volatileUpdatedAt < cutoff {
             volatileSource = ""
         }
+        if !volatileTranslation.isEmpty && volatileTranslationUpdatedAt < cutoff {
+            volatileTranslation = ""
+        }
     }
 
     func setStatusMessage(_ message: String) {
@@ -78,6 +131,10 @@ final class CaptionState {
     func reset() {
         volatileSource = ""
         volatileUpdatedAt = .distantPast
+        volatileTranslation = ""
+        volatileTranslationUpdatedAt = .distantPast
+        volatileGeneration = 0
+        volatileTranslationGeneration = -1
         sourceLines = []
         translatedLines = []
     }

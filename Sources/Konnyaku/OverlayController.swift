@@ -15,9 +15,9 @@ final class OverlayController: NSObject, NSWindowDelegate {
         }
         guard let screen = NSScreen.main else { return }
         let margin: CGFloat = 24
-        // 複数行字幕 (上段 最大 4 行 + 下段 3 行) 分。内容は下寄せのため、
-        // 折り返しで溢れた場合は古い行側 (上端) から画面外に欠ける
-        let height: CGFloat = 340
+        // 複数行字幕 (上下段とも確定 3 行 + 話し中/追従 1 行 = 最大 8 行) 分。
+        // 内容は下寄せのため、折り返しで溢れた場合は古い行側 (上端) から画面外に欠ける
+        let height: CGFloat = 380
         var frame = NSRect(
             x: screen.visibleFrame.minX + margin,
             y: screen.visibleFrame.minY + margin,
