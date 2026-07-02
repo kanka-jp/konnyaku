@@ -1,5 +1,6 @@
 "menu.start" = "Start Subtitles";
 "menu.stop" = "Stop Subtitles";
+"menu.cancel_download" = "Cancel Download";
 "menu.move_overlay" = "Move Overlay (Drag)";
 "menu.font_size" = "Text Size";
 "menu.input_language" = "Spoken Language";

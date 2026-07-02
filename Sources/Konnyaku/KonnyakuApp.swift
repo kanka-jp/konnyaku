@@ -20,16 +20,18 @@ struct KonnyakuApp: App {
                     // session はこの closure 内で逐次アクセスのみのため、isolation checking を
                     // 外して nonisolated な prepareTranslation へ渡してよい
                     nonisolated(unsafe) let session = session
+                    // DL 中の設定変更で configuration が差し替わると本 task は cancel
+                    // されるが、完了と cancel の race で旧結果が届くことがあるため、
+                    // 発火時の configuration を控えて完了通知側で一致を検証する
+                    let launched = controller.modelDownloadConfiguration
                     debugLog("model download started")
                     do {
                         try await session.prepareTranslation()
-                        // DL 中の言語変更で configuration が差し替わると本 task は
-                        // cancel される。旧ペアの完了で自動開始しない
                         guard !Task.isCancelled else { return }
-                        await controller.modelDownloadSucceeded()
+                        await controller.modelDownloadSucceeded(for: launched)
                     } catch {
                         guard !(error is CancellationError), !Task.isCancelled else { return }
-                        controller.modelDownloadFailed(error)
+                        controller.modelDownloadFailed(error, for: launched)
                     }
                 }
         }
@@ -45,17 +47,19 @@ struct KonnyakuApp: App {
 private struct MenuContent: View {
     let controller: AppController
 
+    private var startButtonTitle: String {
+        if controller.state.isRunning { return t("menu.stop") }
+        if controller.isDownloadingModel { return t("menu.cancel_download") }
+        return t("menu.start")
+    }
+
     var body: some View {
-        Button(controller.state.isRunning ? t("menu.stop") : t("menu.start")) {
+        Button(startButtonTitle) {
             Task {
                 await controller.toggle()
             }
         }
         .disabled(controller.isBusy)
-
-        if controller.isDownloadingModel {
-            Text(t("status.model_downloading"))
-        }
 
         if let message = controller.state.statusMessage {
             Text(message)

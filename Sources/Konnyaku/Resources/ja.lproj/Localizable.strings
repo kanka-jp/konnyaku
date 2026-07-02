@@ -1,5 +1,6 @@
 "menu.start" = "字幕を開始";
 "menu.stop" = "字幕を停止";
+"menu.cancel_download" = "ダウンロードを中止";
 "menu.move_overlay" = "オーバーレイを移動 (ドラッグ)";
 "menu.font_size" = "文字サイズ";
 "menu.input_language" = "入力言語 (音声)";

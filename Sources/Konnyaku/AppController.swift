@@ -85,23 +85,36 @@ final class AppController {
         scheduleLanguageRestart()
     }
 
-    // KonnyakuApp の translationTask (prepareTranslation 実行元) から結果を受け取る
-    func modelDownloadSucceeded() async {
+    // KonnyakuApp の translationTask (prepareTranslation 実行元) から結果を受け取る。
+    // DL 中の設定変更で configuration が差し替わった後に旧 task の完了が届くことが
+    // あるため、発火時の configuration と現在値の一致を guard する (stale 上書き防止)
+    func modelDownloadSucceeded(for configuration: TranslationSession.Configuration?) async {
+        guard configuration == modelDownloadConfiguration else { return }
         debugLog("model download done, auto-starting captions")
         modelDownloadConfiguration = nil
         state.statusMessage = nil
         await start()
     }
 
-    func modelDownloadFailed(_ error: Error) {
+    func modelDownloadFailed(_ error: Error, for configuration: TranslationSession.Configuration?) {
+        guard configuration == modelDownloadConfiguration else { return }
         debugLog("model download failed: \(error)")
         modelDownloadConfiguration = nil
         state.statusMessage = "\(t("status.model_download_failed")): \(error.localizedDescription)"
     }
 
+    func cancelModelDownload() {
+        debugLog("model download cancelled by user")
+        modelDownloadConfiguration = nil
+        state.statusMessage = nil
+    }
+
     func toggle() async {
         if state.isRunning {
             await stop()
+        } else if isDownloadingModel {
+            // DL 中の再押下は中止として扱う (再開扱いで進捗を捨てる誤操作を防ぐ)
+            cancelModelDownload()
         } else {
             await start()
         }
@@ -231,8 +244,15 @@ final class AppController {
     }
 
     private func restartIfRunning() async {
-        guard state.isRunning else { return }
-        await stop()
-        await start()
+        if state.isRunning {
+            await stop()
+            await start()
+            return
+        }
+        // モデル DL 中の言語・strategy 変更は、旧設定のアセットを待たず新設定で
+        // DL からやり直す (start 冒頭の configuration クリアが旧 task を cancel する)
+        if isDownloadingModel {
+            await start()
+        }
     }
 }
