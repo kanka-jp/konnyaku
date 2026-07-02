@@ -240,12 +240,11 @@ final class AppController {
         }
     }
 
-    // start の全終了経路で繰り越しを消費する。早期 return 時 (isRunning false) は
-    // 再起動せず破棄し、次回の正常 start 直後に無駄な stop→start が走るのを防ぐ
+    // start の全終了経路で繰り越しを消費する。実行可否は restartIfRunning に一本化する
+    // (稼働中と DL 中は新設定でやり直し、mic 拒否等の素の早期 return では何もしない)
     private func consumePendingLanguageRestart() {
         guard pendingLanguageRestart else { return }
         pendingLanguageRestart = false
-        guard state.isRunning else { return }
         Task {
             await restartIfRunning()
         }
