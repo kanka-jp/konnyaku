@@ -25,7 +25,9 @@ jobs:
       - name: Write release notes header
         run: |
           cat > /tmp/release-notes.md <<'EOF'
-          ad-hoc 署名のため、初回起動は右クリック → 開く (または `xattr -dr com.apple.quarantine Konnyaku.app`) が必要です。
+          Homebrew でインストールできます: `brew install --cask kanka-jp/tap/konnyaku`
+
+          ad-hoc 署名のため、初回起動はシステム設定 → プライバシーとセキュリティ → 「このまま開く」での許可 (または `xattr -dr com.apple.quarantine Konnyaku.app`) が必要です。
           EOF
       - name: Create GitHub Release
         env:
@@ -35,3 +37,21 @@ jobs:
             --title "$GITHUB_REF_NAME" \
             --generate-notes \
             --notes-file /tmp/release-notes.md
+      - name: Bump Homebrew cask
+        env:
+          TAP_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
+        run: |
+          if [ -z "$TAP_TOKEN" ]; then
+            echo "::warning::TAP_GITHUB_TOKEN が未設定のため Homebrew cask の更新を skip"
+            exit 0
+          fi
+          VERSION="${GITHUB_REF_NAME#v}"
+          SHA256=$(shasum -a 256 "dist/Konnyaku-${GITHUB_REF_NAME}.zip" | awk '{print $1}')
+          git clone "https://x-access-token:${TAP_TOKEN}@github.com/kanka-jp/homebrew-tap.git" "$RUNNER_TEMP/homebrew-tap"
+          cd "$RUNNER_TEMP/homebrew-tap"
+          sed -i '' -E "s|^  version \".*\"$|  version \"${VERSION}\"|" Casks/konnyaku.rb
+          sed -i '' -E "s|^  sha256 \".*\"$|  sha256 \"${SHA256}\"|" Casks/konnyaku.rb
+          git -c user.name='github-actions[bot]' \
+              -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+              commit -am "konnyaku ${VERSION}"
+          git push

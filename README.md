@@ -18,6 +18,20 @@ Named after ほんやくコンニャク (honyaku-konnyaku, the translation gadge
 - マイクへのアクセス許可
 - 日本語の音声認識モデルと日本語→英語の翻訳言語モデル (初回にダウンロード)
 
+## インストール
+
+```bash
+brew install --cask kanka-jp/tap/konnyaku
+```
+
+ad-hoc 署名のため、初回起動時は Gatekeeper にブロックされる。システム設定 → プライバシーとセキュリティ → 「このまま開く」で許可するか、quarantine 属性を外す:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Konnyaku.app
+```
+
+zip を直接使う場合は [Releases](https://github.com/kanka-jp/konnyaku/releases) からダウンロードする (同じ Gatekeeper 許可が必要)。
+
 ## ビルドと起動
 
 ```bash
