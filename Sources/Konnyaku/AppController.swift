@@ -7,11 +7,8 @@ import Translation
 @Observable
 final class AppController {
     let state = CaptionState()
-    let settings = OverlaySettings()
-    let languages = LanguageSettings()
-
-    static let correctionEnabledKey = "correction.enabled"
-    static let preferLowLatencyTranslationKey = "translation.preferLowLatency"
+    let settings: OverlaySettings
+    let languages: LanguageSettings
 
     private let overlay = OverlayController()
     private var pipeline: CaptionPipeline?
@@ -24,27 +21,26 @@ final class AppController {
 
     var correctionEnabled: Bool {
         didSet {
-            UserDefaults.standard.set(correctionEnabled, forKey: Self.correctionEnabledKey)
+            ConfigStore.set(String(correctionEnabled), forKey: ConfigStore.correctionKey)
         }
     }
 
     var preferLowLatencyTranslation: Bool {
         didSet {
-            UserDefaults.standard.set(
-                preferLowLatencyTranslation, forKey: Self.preferLowLatencyTranslationKey)
+            ConfigStore.set(String(preferLowLatencyTranslation), forKey: ConfigStore.lowLatencyKey)
         }
     }
 
     init() {
-        correctionEnabled = UserDefaults.standard.bool(forKey: Self.correctionEnabledKey)
-        // 未設定 (初回) は速度優先を default にする。bool(forKey:) は未設定と false を
-        // 区別できないため object(forKey:) で判定する
-        if let saved = UserDefaults.standard.object(forKey: Self.preferLowLatencyTranslationKey)
-            as? Bool {
-            preferLowLatencyTranslation = saved
-        } else {
-            preferLowLatencyTranslation = true
-        }
+        // 手編集用の実体を初回起動時から用意する (メニュー変更を待たない)
+        try? ConfigStore.ensureFileExists()
+        try? VocabularyStore.ensureFileExists()
+        let config = ConfigStore.load()
+        settings = OverlaySettings(config: config)
+        languages = LanguageSettings(config: config)
+        correctionEnabled = config[ConfigStore.correctionKey] == "true"
+        // 未設定 (初回) は速度優先を default にする (明示的な false のみ無効化)
+        preferLowLatencyTranslation = config[ConfigStore.lowLatencyKey] != "false"
     }
 
     func loadLanguages() async {

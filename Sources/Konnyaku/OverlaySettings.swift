@@ -4,8 +4,6 @@ import Observation
 @MainActor
 @Observable
 final class OverlaySettings {
-    static let fontScaleKey = "overlay.fontScale"
-
     struct FontScale: Identifiable, Equatable {
         let id: Double
         let labelKey: String
@@ -19,14 +17,14 @@ final class OverlaySettings {
 
     var fontScale: Double {
         didSet {
-            UserDefaults.standard.set(fontScale, forKey: Self.fontScaleKey)
+            ConfigStore.set(String(fontScale), forKey: ConfigStore.fontScaleKey)
         }
     }
 
     var isMovable = false
 
-    init() {
-        let saved = UserDefaults.standard.double(forKey: Self.fontScaleKey)
+    init(config: [String: String]) {
+        let saved = config[ConfigStore.fontScaleKey].flatMap(Double.init) ?? 1.0
         fontScale = Self.fontScales.contains { $0.id == saved } ? saved : 1.0
     }
 }
