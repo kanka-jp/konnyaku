@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import Translation
 
 @main
 struct KonnyakuApp: App {
@@ -12,21 +13,37 @@ struct KonnyakuApp: App {
                     await controller.loadLanguages()
                 }
         } label: {
-            Image(systemName: controller.state.isRunning ? "captions.bubble.fill" : "captions.bubble")
+            // label は常駐 view のため、モデル DL の translationTask をここに載せると
+            // メニューを開かなくてもバックグラウンドで DL が進む
+            Image(systemName: menuBarSymbolName)
+                .translationTask(controller.modelDownloadConfiguration) { session in
+                    // session はこの closure 内で逐次アクセスのみのため、isolation checking を
+                    // 外して nonisolated な prepareTranslation へ渡してよい
+                    nonisolated(unsafe) let session = session
+                    debugLog("model download started")
+                    do {
+                        try await session.prepareTranslation()
+                        // DL 中の言語変更で configuration が差し替わると本 task は
+                        // cancel される。旧ペアの完了で自動開始しない
+                        guard !Task.isCancelled else { return }
+                        await controller.modelDownloadSucceeded()
+                    } catch {
+                        guard !(error is CancellationError), !Task.isCancelled else { return }
+                        controller.modelDownloadFailed(error)
+                    }
+                }
         }
+    }
 
-        Window(Text(t("setup.title")), id: "translation-setup") {
-            TranslationSetupView(languages: controller.languages) {
-                controller.translationSetupCompleted()
-            }
-        }
-        .windowResizability(.contentSize)
+    private var menuBarSymbolName: String {
+        if controller.state.isRunning { return "captions.bubble.fill" }
+        if controller.isDownloadingModel { return "arrow.down.circle.dotted" }
+        return "captions.bubble"
     }
 }
 
 private struct MenuContent: View {
     let controller: AppController
-    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         Button(controller.state.isRunning ? t("menu.stop") : t("menu.start")) {
@@ -35,6 +52,10 @@ private struct MenuContent: View {
             }
         }
         .disabled(controller.isBusy)
+
+        if controller.isDownloadingModel {
+            Text(t("status.model_downloading"))
+        }
 
         if let message = controller.state.statusMessage {
             Text(message)
@@ -57,6 +78,16 @@ private struct MenuContent: View {
         )) {
             ForEach(controller.languages.availableOutputs, id: \.identifier) { output in
                 Text(output.displayName).tag(output.identifier)
+            }
+        }
+
+        if TranslationSupport.isLowLatencyStrategyAvailable {
+            Picker(t("menu.translation_strategy"), selection: Binding(
+                get: { controller.preferLowLatencyTranslation },
+                set: { controller.setPreferLowLatencyTranslation($0) }
+            )) {
+                Text(t("strategy.low_latency")).tag(true)
+                Text(t("strategy.high_fidelity")).tag(false)
             }
         }
 
@@ -92,13 +123,6 @@ private struct MenuContent: View {
 
         Button(t("menu.edit_vocabulary")) {
             controller.editVocabulary()
-        }
-
-        Divider()
-
-        Button(t("menu.translation_setup")) {
-            openWindow(id: "translation-setup")
-            NSApp.activate(ignoringOtherApps: true)
         }
 
         Divider()
