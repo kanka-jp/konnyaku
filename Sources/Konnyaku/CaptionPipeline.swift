@@ -146,7 +146,7 @@ final class CaptionPipeline {
     }
 
     // 話し中 (volatile) テキストの追従訳。文確定を待たず下段を随時更新し、自分の文の
-    // 確定訳が来たら置き換わる (CaptionState.appendTranslation が同世代の追従訳のみ消す)。
+    // 確定訳が来たら置き換わる (CaptionState.appendTranslation が自分の世代以前の追従訳を消す)。
     // 確定翻訳と別 worker・別 session なのは、確定訳の品質と順序を追従訳の
     // 割り込みで乱さないため
     private func startVolatileTranslationWorker(
