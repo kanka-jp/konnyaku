@@ -41,6 +41,7 @@ jobs:
         env:
           TAP_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
           if [ -z "$TAP_TOKEN" ]; then
             echo "::warning::TAP_GITHUB_TOKEN が未設定のため Homebrew cask の更新を skip"
             exit 0
