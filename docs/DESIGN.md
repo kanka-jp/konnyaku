@@ -98,7 +98,7 @@ SwiftPM executable + `make app` で `.app` bundle を組み立てる (Xcode プ�
 
 ## テスト方針
 
-中核が OS フレームワークの結線であり、モック化しても実装の写し鏡にしかならないため、unit test は純粋ロジック (字幕状態管理・文の確定処理) に限定する。CI は GitHub Actions `macos-26` runner での `swift build` を **手動トリガー (`workflow_dispatch`) のみ**で提供する (private リポジトリでは macOS runner の課金 (10x multiplier) が push ごとに発生するため常時実行しない)。音声認識・翻訳・オーバーレイ表示は実機での手動確認 (mic TCC はユーザー操作が必要)。
+中核が OS フレームワークの結線であり、モック化しても実装の写し鏡にしかならないため、unit test は純粋ロジック (字幕状態管理・文の確定処理) に限定する。CI は GitHub Actions `macos-26` runner で `make test` (swift test) と `make app` (release build + bundle 組み立て) を main への push・pull request・手動トリガー (`workflow_dispatch`) で実行する (public リポジトリのため macOS runner は無課金)。`v*` tag の push で release workflow が test → tag からの version 反映 → app bundle の zip 化 → GitHub Release 作成までを行う (配布物は ad-hoc 署名のまま。notarization は Developer ID 取得の実需要が出てから)。音声認識・翻訳・オーバーレイ表示は実機での手動確認 (mic TCC はユーザー操作が必要)。
 
 ## References
 
