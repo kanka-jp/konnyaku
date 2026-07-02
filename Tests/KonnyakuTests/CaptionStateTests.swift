@@ -116,12 +116,52 @@ struct CaptionStateTests {
         #expect(state.volatileSource.isEmpty)
     }
 
+    // 話し中の追従訳は確定訳の後ろに 1 行表示され、確定訳の到着で置き換わる
+    @Test
+    func volatileTranslationDisplaysAfterFinalizedAndIsReplacedByFinal() {
+        let state = CaptionState()
+        state.appendTranslation("First.")
+        state.setVolatileTranslation("typing...", generation: state.volatileGeneration)
+        #expect(state.translationDisplayLines == ["First.", "typing..."])
+
+        state.appendTranslation("Second.")
+        #expect(state.translationDisplayLines == ["First.", "Second."])
+    }
+
+    // 訳している間に文が確定した (世代が進んだ) 追従訳は stale として捨てる。
+    // 捨てないと確定訳の後に古い追従訳が再表示される
+    @Test
+    func volatileTranslationRejectsStaleGeneration() {
+        let state = CaptionState()
+        let generation = state.volatileGeneration
+        state.appendFinalSource("確定文")
+        state.setVolatileTranslation("stale", generation: generation)
+        #expect(state.translationDisplayLines.isEmpty)
+
+        state.setVolatileTranslation("fresh", generation: state.volatileGeneration)
+        #expect(state.translationDisplayLines == ["fresh"])
+    }
+
+    @Test
+    func pruneExpiredClearsStaleVolatileTranslation() {
+        let state = CaptionState()
+        let base = Date(timeIntervalSinceReferenceDate: 0)
+        state.setVolatileTranslation("typing...", generation: state.volatileGeneration, at: base)
+
+        state.pruneExpired(now: base.addingTimeInterval(CaptionState.lineLifetime - 1))
+        #expect(state.translationDisplayLines == ["typing..."])
+
+        state.pruneExpired(now: base.addingTimeInterval(CaptionState.lineLifetime + 1))
+        #expect(state.translationDisplayLines.isEmpty)
+    }
+
     @Test
     func resetClearsAllCaptionContent() {
         let state = CaptionState()
         state.setVolatileSource("話し中")
         state.appendFinalSource("確定文")
         state.appendTranslation("Translated.")
+        state.setVolatileTranslation("typing...", generation: state.volatileGeneration)
         state.reset()
         #expect(state.sourceDisplayLines.isEmpty)
         #expect(state.translationDisplayLines.isEmpty)

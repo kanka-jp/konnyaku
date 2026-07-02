@@ -11,9 +11,11 @@ final class CaptionPipeline {
     private var recognitionTask: Task<Void, Never>?
     private var correctionTask: Task<Void, Never>?
     private var translationTask: Task<Void, Never>?
+    private var volatileTranslationTask: Task<Void, Never>?
     private var pruneTask: Task<Void, Never>?
     private var pendingCorrection: AsyncStream<String>.Continuation?
     private var pendingSourceText: AsyncStream<String>.Continuation?
+    private var pendingVolatileText: AsyncStream<String>.Continuation?
     private var correctionBacklog = 0
     private var segmentThreshold = CaptionPipeline.latinSegmentThreshold
     private var forcedFinalizeInFlight = false
@@ -57,6 +59,11 @@ final class CaptionPipeline {
                 outputLanguage: outputLanguage,
                 lowLatency: useLowLatencyTranslation
             )
+            startVolatileTranslationWorker(
+                inputLanguage: inputLocale.language,
+                outputLanguage: outputLanguage,
+                lowLatency: useLowLatencyTranslation
+            )
         }
         // 補正プロンプトの few-shot・フィラー語彙・語尾復元は日本語専用のため、
         // 他言語入力では worker を起動せず誤った書き換えを避ける
@@ -91,6 +98,7 @@ final class CaptionPipeline {
                     } else {
                         self.logVolatileProgress(text)
                         self.state.setVolatileSource(text)
+                        self.yieldVolatileForTranslation(text)
                         self.forceFinalizeIfOverflowing(volatile: text)
                     }
                 }
@@ -115,6 +123,60 @@ final class CaptionPipeline {
         guard bucket != lastLoggedVolatileBucket else { return }
         lastLoggedVolatileBucket = bucket
         debugLog("volatile len=\(text.count)\(logContentSuffix(text))")
+    }
+
+    // ごく短い話し始めの訳は chatter になるだけなので追従翻訳に流さない
+    private static let minVolatileTranslationLength = 3
+
+    private func yieldVolatileForTranslation(_ text: String) {
+        guard text.count >= Self.minVolatileTranslationLength else { return }
+        pendingVolatileText?.yield(text)
+    }
+
+    // 話し中 (volatile) テキストの追従訳。文確定を待たず下段を随時更新し、確定訳が
+    // 来たら置き換わる (CaptionState.appendTranslation が volatileTranslation を消す)。
+    // 確定翻訳と別 worker・別 session なのは、確定訳の品質と順序を追従訳の
+    // 割り込みで乱さないため
+    private func startVolatileTranslationWorker(
+        inputLanguage: Locale.Language,
+        outputLanguage: Locale.Language,
+        lowLatency: Bool
+    ) {
+        // 翻訳が追いつかない間に届いた volatile は最新 1 件だけ残して捨てる
+        // (翻訳所要時間そのものが自然な throttle になる)
+        let (stream, continuation) = AsyncStream.makeStream(
+            of: String.self,
+            bufferingPolicy: .bufferingNewest(1)
+        )
+        pendingVolatileText = continuation
+
+        let state = self.state
+        volatileTranslationTask = Task.detached {
+            let pair = await TranslationSupport.resolvePair(input: inputLanguage, output: outputLanguage)
+            let session = TranslationSupport.makeSession(
+                source: pair.source, target: pair.target, lowLatency: lowLatency)
+            do {
+                try await session.prepareTranslation()
+            } catch {
+                debugLog("volatile prepareTranslation error: \(error)")
+            }
+            for await text in stream {
+                if Task.isCancelled { return }
+                // 訳している間に文が確定したら stale として捨てるため、開始時の世代を控える
+                let generation = await state.volatileGeneration
+                do {
+                    let translated = try await session.translate(text).targetText
+                    await MainActor.run {
+                        guard !Task.isCancelled else { return }
+                        state.setVolatileTranslation(translated, generation: generation)
+                    }
+                } catch {
+                    guard !(error is CancellationError), !Task.isCancelled else { return }
+                    // 追従訳は best-effort。失敗しても確定訳が後から表示される
+                    debugLog("volatile translate error: \(error)")
+                }
+            }
+        }
     }
 
     // 切れ目なく話し続けると isFinal が届かず翻訳が始まらないため強制確定で文を区切る。
@@ -242,12 +304,16 @@ final class CaptionPipeline {
         pendingCorrection = nil
         pendingSourceText?.finish()
         pendingSourceText = nil
+        pendingVolatileText?.finish()
+        pendingVolatileText = nil
         recognitionTask?.cancel()
         recognitionTask = nil
         correctionTask?.cancel()
         correctionTask = nil
         translationTask?.cancel()
         translationTask = nil
+        volatileTranslationTask?.cancel()
+        volatileTranslationTask = nil
         pruneTask?.cancel()
         pruneTask = nil
         state.isRunning = false

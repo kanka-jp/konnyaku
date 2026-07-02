@@ -15,12 +15,16 @@ final class CaptionState {
     }
 
     private(set) var volatileSource = ""
+    private(set) var volatileTranslation = ""
     private(set) var sourceLines: [Line] = []
     private(set) var translatedLines: [Line] = []
     var isRunning = false
     var statusMessage: String?
 
     private var volatileUpdatedAt = Date.distantPast
+    private var volatileTranslationUpdatedAt = Date.distantPast
+    // 文の切り替わり (確定) を跨いで届いた追従訳を破棄するための世代番号
+    private(set) var volatileGeneration = 0
 
     var sourceDisplayLines: [String] {
         var lines = sourceLines.map(\.text)
@@ -31,7 +35,11 @@ final class CaptionState {
     }
 
     var translationDisplayLines: [String] {
-        translatedLines.map(\.text)
+        var lines = translatedLines.map(\.text)
+        if !volatileTranslation.isEmpty {
+            lines.append(volatileTranslation)
+        }
+        return lines
     }
 
     func setVolatileSource(_ text: String, at now: Date = Date()) {
@@ -39,8 +47,17 @@ final class CaptionState {
         volatileUpdatedAt = now
     }
 
+    // 話し中テキストの追従訳。generation が現在と異なる (訳している間に文が確定した)
+    // 場合は stale として捨て、確定訳の後に古い追従訳が再表示されるのを防ぐ
+    func setVolatileTranslation(_ text: String, generation: Int, at now: Date = Date()) {
+        guard generation == volatileGeneration else { return }
+        volatileTranslation = text
+        volatileTranslationUpdatedAt = now
+    }
+
     func appendFinalSource(_ text: String, at now: Date = Date()) {
         volatileSource = ""
+        volatileGeneration += 1
         sourceLines.append(Line(text: text, addedAt: now))
         if sourceLines.count > Self.maxSourceLines {
             sourceLines.removeFirst(sourceLines.count - Self.maxSourceLines)
@@ -56,6 +73,8 @@ final class CaptionState {
     }
 
     func appendTranslation(_ text: String, at now: Date = Date()) {
+        // 確定訳が追従訳を置き換える
+        volatileTranslation = ""
         translatedLines.append(Line(text: text, addedAt: now))
         if translatedLines.count > Self.maxTranslatedLines {
             translatedLines.removeFirst(translatedLines.count - Self.maxTranslatedLines)
@@ -69,6 +88,9 @@ final class CaptionState {
         if !volatileSource.isEmpty && volatileUpdatedAt < cutoff {
             volatileSource = ""
         }
+        if !volatileTranslation.isEmpty && volatileTranslationUpdatedAt < cutoff {
+            volatileTranslation = ""
+        }
     }
 
     func setStatusMessage(_ message: String) {
@@ -78,6 +100,9 @@ final class CaptionState {
     func reset() {
         volatileSource = ""
         volatileUpdatedAt = .distantPast
+        volatileTranslation = ""
+        volatileTranslationUpdatedAt = .distantPast
+        volatileGeneration = 0
         sourceLines = []
         translatedLines = []
     }
