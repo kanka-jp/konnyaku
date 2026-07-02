@@ -88,12 +88,16 @@ final class AppController {
     // KonnyakuApp の translationTask (prepareTranslation 実行元) から結果を受け取る。
     // DL 中の設定変更で configuration が差し替わった後に旧 task の完了が届くことが
     // あるため、発火時の configuration と現在値の一致を guard する (stale 上書き防止)
-    func modelDownloadSucceeded(for configuration: TranslationSession.Configuration?) async {
+    func modelDownloadSucceeded(for configuration: TranslationSession.Configuration?) {
         guard configuration == modelDownloadConfiguration else { return }
         debugLog("model download done, auto-starting captions")
         modelDownloadConfiguration = nil
         state.statusMessage = nil
-        await start()
+        // nil 代入は translationTask (この通知の呼び出し元) 自身を cancel するため、
+        // 自動開始はその cancel を継承しない独立 Task で行う
+        Task {
+            await start()
+        }
     }
 
     func modelDownloadFailed(_ error: Error, for configuration: TranslationSession.Configuration?) {
@@ -167,11 +171,15 @@ final class AppController {
                 // status 文言で表現し、完了後は modelDownloadSucceeded が自動開始する
                 debugLog("model not installed, scheduling auto-download (lowLatency: \(plan.usesLowLatency))")
                 state.statusMessage = t("status.model_downloading")
-                modelDownloadConfiguration = TranslationSupport.makeSetupConfiguration(
+                var configuration = TranslationSupport.makeSetupConfiguration(
                     source: pair.source,
                     target: pair.target,
                     lowLatency: plan.usesLowLatency
                 )
+                // 失敗後の再試行等で前回と同値の configuration は translationTask が
+                // 再発火しないため、version を進めて常に新しい値として扱わせる
+                configuration.invalidate()
+                modelDownloadConfiguration = configuration
                 return
             case .unsupported:
                 state.statusMessage = t("status.unsupported_pair")

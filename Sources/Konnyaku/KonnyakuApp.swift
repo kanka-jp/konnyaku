@@ -28,7 +28,7 @@ struct KonnyakuApp: App {
                     do {
                         try await session.prepareTranslation()
                         guard !Task.isCancelled else { return }
-                        await controller.modelDownloadSucceeded(for: launched)
+                        controller.modelDownloadSucceeded(for: launched)
                     } catch {
                         guard !(error is CancellationError), !Task.isCancelled else { return }
                         controller.modelDownloadFailed(error, for: launched)
