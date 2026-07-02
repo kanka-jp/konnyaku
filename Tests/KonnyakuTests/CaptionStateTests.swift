@@ -133,7 +133,8 @@ struct CaptionStateTests {
 
     // 文確定の瞬間に追従訳を消さず、自分の確定訳の到着まで placeholder として残す
     // (確定〜確定訳到着の間に下段が一瞬空になる regression の防止)。
-    // 次の文の追従訳が先に届いた場合はそちらが優先して上書きする (追従スロットは 1 つ)
+    // 次の文の追従訳が先に届いた場合はそちらが優先して上書きする (追従スロットは 1 つ)。
+    // 10 秒無更新なら pruneExpired が先に消す (確定訳到着までの無期限保証ではない)
     @Test
     func volatileTranslationPersistsAcrossFinalizeUntilRealTranslationArrives() {
         let state = CaptionState()
@@ -210,6 +211,21 @@ struct CaptionStateTests {
 
         state.appendTranslation("A final.", generation: generationA)
         #expect(state.translationDisplayLines == ["A final."])
+    }
+
+    // 前の文の確定訳が buffer 溢れで欠落したまま後の文の確定訳が届いた場合、前の文の
+    // placeholder は孤児として消す (確定訳は文順に届くため、後の文の確定訳の到着は
+    // それ以前の文の確定訳がもう来ないことを意味する)
+    @Test
+    func laterFinalTranslationClearsOrphanedOlderPlaceholder() {
+        let state = CaptionState()
+        let generationA = state.volatileGeneration
+        state.setVolatileTranslation("A typing...", generation: generationA)
+        state.appendFinalSource("文A")
+        state.appendFinalSource("文B")
+
+        state.appendTranslation("B final.", generation: generationA + 1)
+        #expect(state.translationDisplayLines == ["B final."])
     }
 
     // stop 時は確定訳がもう届かないため、旧世代の placeholder も含め全て消す

@@ -98,10 +98,11 @@ final class CaptionState {
     }
 
     // generation は「この確定訳の文の volatile が刻まれていた世代」(appendFinalSource が
-    // 進める前の値)。同世代の追従訳のみ置き換え、別の文の確定訳が遅れて到着した場合の
-    // 巻き添えクリア (flicker) を防ぐ
+    // 進める前の値)。自分の文以前の追従訳のみ置き換え、後の文 (現在話し中) の追従訳の
+    // 巻き添えクリア (flicker) を防ぐ。自分より古い placeholder も消す — 確定訳は文順に
+    // 届くため、それは対応する確定訳が buffer 溢れで欠落した孤児で、残すと表示され続ける
     func appendTranslation(_ text: String, generation: Int, at now: Date = Date()) {
-        if volatileTranslationGeneration == generation {
+        if volatileTranslationGeneration <= generation {
             volatileTranslation = ""
             volatileTranslationGeneration = -1
         }
