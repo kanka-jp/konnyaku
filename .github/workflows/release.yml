@@ -51,6 +51,12 @@ jobs:
           cd "$RUNNER_TEMP/homebrew-tap"
           sed -i '' -E "s|^  version \".*\"$|  version \"${VERSION}\"|" Casks/konnyaku.rb
           sed -i '' -E "s|^  sha256 \".*\"$|  sha256 \"${SHA256}\"|" Casks/konnyaku.rb
+          grep -q "^  version \"${VERSION}\"$" Casks/konnyaku.rb
+          grep -q "^  sha256 \"${SHA256}\"$" Casks/konnyaku.rb
+          if git diff --quiet; then
+            echo "cask は既に最新のため commit を skip"
+            exit 0
+          fi
           git -c user.name='github-actions[bot]' \
               -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
               commit -am "konnyaku ${VERSION}"
