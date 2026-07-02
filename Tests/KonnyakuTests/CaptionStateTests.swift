@@ -132,7 +132,8 @@ struct CaptionStateTests {
     }
 
     // 文確定の瞬間に追従訳を消さず、自分の確定訳の到着まで placeholder として残す
-    // (確定〜確定訳到着の間に下段が一瞬空になる regression の防止)
+    // (確定〜確定訳到着の間に下段が一瞬空になる regression の防止)。
+    // 次の文の追従訳が先に届いた場合はそちらが優先して上書きする (追従スロットは 1 つ)
     @Test
     func volatileTranslationPersistsAcrossFinalizeUntilRealTranslationArrives() {
         let state = CaptionState()
@@ -192,6 +193,35 @@ struct CaptionStateTests {
         #expect(state.translationDisplayLines.isEmpty)
 
         state.setVolatileTranslation("stale", generation: generation)
+        #expect(state.translationDisplayLines.isEmpty)
+    }
+
+    // 確定済みの前の文の placeholder (確定訳待ち) は、句読点のみ final の破棄では消さない
+    // (確定訳は届くため、消すと到着まで下段が空く)
+    @Test
+    func discardVolatileSegmentKeepsPreviousSentencePlaceholder() {
+        let state = CaptionState()
+        let generationA = state.volatileGeneration
+        state.setVolatileTranslation("A typing...", generation: generationA)
+        state.appendFinalSource("文A")
+
+        state.discardVolatileSegment()
+        #expect(state.translationDisplayLines == ["A typing..."])
+
+        state.appendTranslation("A final.", generation: generationA)
+        #expect(state.translationDisplayLines == ["A final."])
+    }
+
+    // stop 時は確定訳がもう届かないため、旧世代の placeholder も含め全て消す
+    // (discardVolatileSegment の条件付きクリアへ統合すると stop 後の残留が再発する)
+    @Test
+    func clearVolatileRemovesEvenPreviousSentencePlaceholder() {
+        let state = CaptionState()
+        let generationA = state.volatileGeneration
+        state.setVolatileTranslation("A typing...", generation: generationA)
+        state.appendFinalSource("文A")
+
+        state.clearVolatile()
         #expect(state.translationDisplayLines.isEmpty)
     }
 

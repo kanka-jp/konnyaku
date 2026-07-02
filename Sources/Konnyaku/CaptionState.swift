@@ -68,10 +68,21 @@ final class CaptionState {
         }
     }
 
-    // 表示に値する確定文が無いままセグメントが終わった (句読点のみの final を捨てた・
-    // 停止した) 場合の後始末。世代を進めて in-flight の追従訳を無効化し、
-    // 対応する確定訳が来ない追従訳の残骸も消す
+    // 表示に値する確定文が無いままセグメントが終わった (句読点のみの final を捨てた)
+    // 場合の後始末。世代を進めて in-flight の追従訳を無効化する。旧世代の placeholder
+    // (確定訳待ち) は消さない — 確定訳が届いて置き換わるため、消すと到着まで下段が空く
     func discardVolatileSegment() {
+        volatileSource = ""
+        if volatileTranslationGeneration == volatileGeneration {
+            volatileTranslation = ""
+            volatileTranslationGeneration = -1
+        }
+        volatileGeneration += 1
+    }
+
+    // 停止時の後始末。worker が全て止まり確定訳・追従訳とも今後届かないため、
+    // 旧世代の placeholder も含め volatile 表示を全て消す
+    func clearVolatile() {
         volatileSource = ""
         volatileTranslation = ""
         volatileGeneration += 1

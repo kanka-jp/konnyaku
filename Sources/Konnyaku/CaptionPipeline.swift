@@ -175,7 +175,7 @@ final class CaptionPipeline {
             for await (text, generation) in stream {
                 if Task.isCancelled { return }
                 // buffer 滞留中に文が確定した項目は翻訳せず捨てる
-                guard await generation == state.volatileGeneration else { continue }
+                guard generation == (await state.volatileGeneration) else { continue }
                 do {
                     let translated = try await session.translate(text).targetText
                     await MainActor.run {
@@ -330,6 +330,6 @@ final class CaptionPipeline {
         pruneTask = nil
         state.isRunning = false
         // pruneTask も止まるため、追従訳を残すと失効せず表示に残り続ける
-        state.discardVolatileSegment()
+        state.clearVolatile()
     }
 }
