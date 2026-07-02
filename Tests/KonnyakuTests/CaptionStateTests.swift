@@ -116,7 +116,7 @@ struct CaptionStateTests {
         #expect(state.volatileSource.isEmpty)
     }
 
-    // 話し中の追従訳は確定訳の後ろに 1 行表示され、確定訳の到着で置き換わる
+    // 話し中の追従訳は確定訳の後ろに 1 行表示され、自分の文の確定訳の到着で置き換わる
     @Test
     func volatileTranslationDisplaysAfterFinalizedAndIsReplacedByFinal() {
         let state = CaptionState()
@@ -124,8 +124,24 @@ struct CaptionStateTests {
         state.setVolatileTranslation("typing...", generation: state.volatileGeneration)
         #expect(state.translationDisplayLines == ["First.", "typing..."])
 
+        // 文の確定 (世代が進む) 後に届いた確定訳が、旧世代の追従訳を置き換える
+        state.appendFinalSource("確定文")
         state.appendTranslation("Second.")
         #expect(state.translationDisplayLines == ["First.", "Second."])
+    }
+
+    // 前の文の確定訳が遅れて到着しても、既に表示中の次の文の追従訳は消さない
+    // (追従表示が一瞬消える flicker の regression 防止)
+    @Test
+    func delayedFinalTranslationKeepsNextSentenceVolatileTranslation() {
+        let state = CaptionState()
+        // 文 A が確定して世代が進み、文 B の追従訳が表示されている
+        state.appendFinalSource("文A")
+        state.setVolatileTranslation("B typing...", generation: state.volatileGeneration)
+
+        // 文 A の確定訳が遅れて到着
+        state.appendTranslation("A final.")
+        #expect(state.translationDisplayLines == ["A final.", "B typing..."])
     }
 
     // 訳している間に文が確定した (世代が進んだ) 追従訳は stale として捨てる。

@@ -25,6 +25,9 @@ final class CaptionState {
     private var volatileTranslationUpdatedAt = Date.distantPast
     // 文の切り替わり (確定) を跨いで届いた追従訳を破棄するための世代番号
     private(set) var volatileGeneration = 0
+    // 表示中の追従訳がどの世代の文のものか (-1 は不在)。確定訳の遅延到着が
+    // 次の文の追従訳を巻き添えクリアしないための判定に使う
+    private var volatileTranslationGeneration = -1
 
     var sourceDisplayLines: [String] {
         var lines = sourceLines.map(\.text)
@@ -52,6 +55,7 @@ final class CaptionState {
     func setVolatileTranslation(_ text: String, generation: Int, at now: Date = Date()) {
         guard generation == volatileGeneration else { return }
         volatileTranslation = text
+        volatileTranslationGeneration = generation
         volatileTranslationUpdatedAt = now
     }
 
@@ -73,8 +77,11 @@ final class CaptionState {
     }
 
     func appendTranslation(_ text: String, at now: Date = Date()) {
-        // 確定訳が追従訳を置き換える
-        volatileTranslation = ""
+        // 確定訳は自分の文の追従訳のみ置き換える。現行世代 (次の文) の追従訳は、
+        // 前の文の確定訳が遅れて到着した場合の巻き添えクリア (flicker) を防ぐため残す
+        if volatileTranslationGeneration != volatileGeneration {
+            volatileTranslation = ""
+        }
         translatedLines.append(Line(text: text, addedAt: now))
         if translatedLines.count > Self.maxTranslatedLines {
             translatedLines.removeFirst(translatedLines.count - Self.maxTranslatedLines)
@@ -103,6 +110,7 @@ final class CaptionState {
         volatileTranslation = ""
         volatileTranslationUpdatedAt = .distantPast
         volatileGeneration = 0
+        volatileTranslationGeneration = -1
         sourceLines = []
         translatedLines = []
     }

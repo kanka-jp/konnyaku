@@ -15,7 +15,7 @@ final class CaptionPipeline {
     private var pruneTask: Task<Void, Never>?
     private var pendingCorrection: AsyncStream<String>.Continuation?
     private var pendingSourceText: AsyncStream<String>.Continuation?
-    private var pendingVolatileText: AsyncStream<String>.Continuation?
+    private var pendingVolatileText: AsyncStream<(text: String, generation: Int)>.Continuation?
     private var correctionBacklog = 0
     private var segmentThreshold = CaptionPipeline.latinSegmentThreshold
     private var forcedFinalizeInFlight = false
@@ -130,7 +130,9 @@ final class CaptionPipeline {
 
     private func yieldVolatileForTranslation(_ text: String) {
         guard text.count >= Self.minVolatileTranslationLength else { return }
-        pendingVolatileText?.yield(text)
+        // 世代は yield 時点で確定させる。worker の dequeue 時に読むと、buffer 滞留中に
+        // 文が確定した古いテキストへ新しい世代が付き、stale 判定をすり抜ける
+        pendingVolatileText?.yield((text, state.volatileGeneration))
     }
 
     // 話し中 (volatile) テキストの追従訳。文確定を待たず下段を随時更新し、確定訳が
@@ -145,7 +147,7 @@ final class CaptionPipeline {
         // 翻訳が追いつかない間に届いた volatile は最新 1 件だけ残して捨てる
         // (翻訳所要時間そのものが自然な throttle になる)
         let (stream, continuation) = AsyncStream.makeStream(
-            of: String.self,
+            of: (text: String, generation: Int).self,
             bufferingPolicy: .bufferingNewest(1)
         )
         pendingVolatileText = continuation
@@ -160,10 +162,10 @@ final class CaptionPipeline {
             } catch {
                 debugLog("volatile prepareTranslation error: \(error)")
             }
-            for await text in stream {
+            for await (text, generation) in stream {
                 if Task.isCancelled { return }
-                // 訳している間に文が確定したら stale として捨てるため、開始時の世代を控える
-                let generation = await state.volatileGeneration
+                // buffer 滞留中に文が確定した項目は翻訳せず捨てる
+                guard await generation == state.volatileGeneration else { continue }
                 do {
                     let translated = try await session.translate(text).targetText
                     await MainActor.run {
