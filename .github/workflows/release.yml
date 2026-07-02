@@ -1,0 +1,37 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Run tests
+        run: make test
+      - name: Stamp version from tag
+        run: /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${GITHUB_REF_NAME#v}" Resources/Info.plist
+      - name: Assemble app bundle
+        run: make app
+      - name: Zip app bundle
+        run: ditto -c -k --keepParent dist/Konnyaku.app "dist/Konnyaku-${GITHUB_REF_NAME}.zip"
+      - name: Write release notes header
+        run: |
+          cat > /tmp/release-notes.md <<'EOF'
+          ad-hoc 署名のため、初回起動は右クリック → 開く (または `xattr -dr com.apple.quarantine Konnyaku.app`) が必要です。
+          EOF
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" "dist/Konnyaku-${GITHUB_REF_NAME}.zip" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes \
+            --notes-file /tmp/release-notes.md
