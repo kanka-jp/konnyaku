@@ -14,24 +14,25 @@ struct KonnyakuApp: App {
                 }
         } label: {
             // label は常駐 view のため、モデル DL の translationTask をここに載せると
-            // メニューを開かなくてもバックグラウンドで DL が進む
+            // メニューを開かなくてもバックグラウンドで DL が進む。
+            // translationTask に渡した値そのものを closure に capture させ、完了通知の
+            // 一致検証 (stale 上書き防止) が「この task を起動した configuration」と
+            // 常に対応するようにする (closure 内で controller から読み直すと、差し替え
+            // 直後の実行で新 configuration を拾う race がある)
+            let downloadConfiguration = controller.modelDownloadConfiguration
             Image(systemName: menuBarSymbolName)
-                .translationTask(controller.modelDownloadConfiguration) { session in
+                .translationTask(downloadConfiguration) { session in
                     // session はこの closure 内で逐次アクセスのみのため、isolation checking を
                     // 外して nonisolated な prepareTranslation へ渡してよい
                     nonisolated(unsafe) let session = session
-                    // DL 中の設定変更で configuration が差し替わると本 task は cancel
-                    // されるが、完了と cancel の race で旧結果が届くことがあるため、
-                    // 発火時の configuration を控えて完了通知側で一致を検証する
-                    let launched = controller.modelDownloadConfiguration
                     debugLog("model download started")
                     do {
                         try await session.prepareTranslation()
                         guard !Task.isCancelled else { return }
-                        controller.modelDownloadSucceeded(for: launched)
+                        controller.modelDownloadSucceeded(for: downloadConfiguration)
                     } catch {
                         guard !(error is CancellationError), !Task.isCancelled else { return }
-                        controller.modelDownloadFailed(error, for: launched)
+                        controller.modelDownloadFailed(error, for: downloadConfiguration)
                     }
                 }
         }
