@@ -306,7 +306,8 @@ final class AppController {
                     state.statusMessage = t("status.model_download_incomplete")
                     let alert = NSAlert()
                     alert.alertStyle = .warning
-                    alert.messageText = t("status.model_download_incomplete")
+                    alert.messageText = t("alert.model_unavailable_title")
+                    alert.informativeText = t("status.model_download_incomplete")
                     // メニューの手動 DL ボタンは DL 中しか出ないため、案内先への導線を
                     // alert 自身に持たせる
                     alert.addButton(withTitle: t("alert.open_settings"))
