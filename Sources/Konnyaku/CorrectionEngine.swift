@@ -80,13 +80,14 @@ final class CorrectionEngine {
             // 化ける実害を観測)。echo は session 履歴 = 語尾復元前の出力の再出現
             // なので、復元前のモデル出力層で比較する (復元後比較では復元で変形した
             // 過去出力の echo を取りこぼす)。汚染検出時は履歴を捨てて再試行に落とす
-            if !Self.isEchoOfSessionHistory(corrected, raw: text, history: sessionExchanges),
-                !Self.isImplausiblyLong(corrected, comparedTo: text) {
+            let isEcho = Self.isEchoOfSessionHistory(corrected, raw: text, history: sessionExchanges)
+            if !isEcho, !Self.isImplausiblyLong(corrected, comparedTo: text) {
                 sessionExchanges.append((text, corrected))
                 return Self.restoringSentenceEnding(of: corrected, toMatch: text)
             }
+            // 閾値調整の材料になるため、どちらのガードが発火したかをログで区別する
             debugLog(
-                "correction contaminated (echo or implausible length \(text.count)→\(corrected.count)), retrying with fresh session"
+                "correction contaminated (\(isEcho ? "echo" : "implausible length") \(text.count)→\(corrected.count)), retrying with fresh session"
             )
         }
         // 停止由来の失敗まで新 session の推論でリトライしない

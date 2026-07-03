@@ -105,6 +105,11 @@ struct CorrectionEngineTests {
         #expect(
             !CorrectionEngine.isImplausiblyLong(
                 "内容を共有します。", comparedTo: "えっと、内容を、あの、共有します"))
+        // 閾値ちょうど (2x + 12 = 60) は許容 (strict `>` の境界を固定し >= への退行を防ぐ)
+        #expect(
+            !CorrectionEngine.isImplausiblyLong(
+                String(repeating: "い", count: 60),
+                comparedTo: String(repeating: "あ", count: 24)))
     }
 
     // 直近 1 件だけでなく古い履歴の echo も検出する (session 履歴は全交換を保持するため)
