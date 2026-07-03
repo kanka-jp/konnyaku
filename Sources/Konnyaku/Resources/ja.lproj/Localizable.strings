@@ -45,6 +45,7 @@
 "status.start_failed" = "開始に失敗しました";
 "status.recognition_error" = "認識エラー";
 "status.translation_error" = "翻訳エラー";
+"status.translation_model_not_installed" = "翻訳モデルがインストールされていません";
 "status.vocabulary_error" = "カスタム語彙ファイルを開けませんでした";
 
 "correction.unavailable.intelligence_off" = "Apple Intelligence が無効のため利用できません";

@@ -36,30 +36,37 @@ struct CaptionStateTests {
     @Test
     func replaceFinalSourceMatchesRetainedLineOnly() {
         let state = CaptionState()
+        let generation = state.volatileGeneration
         state.appendFinalSource("認識結果")
-        state.replaceFinalSource("認識結果", with: "補正結果")
+        state.replaceFinalSource("認識結果", with: "補正結果", generation: generation)
         #expect(state.sourceLines.map(\.text) == ["補正結果"])
 
         // 次の確定文が流れても、対象行が保持中なら差し替える
         state.appendFinalSource("次の文")
-        state.replaceFinalSource("補正結果", with: "遅延補正")
+        state.replaceFinalSource("補正結果", with: "遅延補正", generation: generation)
         #expect(state.sourceLines.map(\.text) == ["遅延補正", "次の文"])
 
         // 対象行が既に押し出されて不在なら何もしない
-        state.replaceFinalSource("押し出された文", with: "無関係な補正")
+        state.replaceFinalSource("押し出された文", with: "無関係な補正", generation: 999)
         #expect(state.sourceLines.map(\.text) == ["遅延補正", "次の文"])
     }
 
-    // 補正 worker は FIFO のため、同一テキストの重複行では最古の一致行から差し替わる
+    // generation 一致で対象行を特定するため、backlog skip 等で補正の完了順序が入れ替わっても
+    // 正しい行だけが差し替わる (文字列一致のみだと最古の一致行を誤って差し替える regression の防止)
     @Test
-    func replaceFinalSourceTargetsOldestDuplicateFirst() {
+    func replaceFinalSourceTargetsMatchingGenerationAmongDuplicateText() {
         let state = CaptionState()
+        let firstGeneration = state.volatileGeneration
         state.appendFinalSource("はい")
+        let secondGeneration = state.volatileGeneration
         state.appendFinalSource("はい")
-        state.replaceFinalSource("はい", with: "はい。")
-        #expect(state.sourceLines.map(\.text) == ["はい。", "はい"])
 
-        state.replaceFinalSource("はい", with: "はい!")
+        // 後に確定した行 (secondGeneration) を先に補正しても、generation が
+        // 一致する行だけが差し替わる (FIFO 前提の最古一致にはならない)
+        state.replaceFinalSource("はい", with: "はい!", generation: secondGeneration)
+        #expect(state.sourceLines.map(\.text) == ["はい", "はい!"])
+
+        state.replaceFinalSource("はい", with: "はい。", generation: firstGeneration)
         #expect(state.sourceLines.map(\.text) == ["はい。", "はい!"])
     }
 
@@ -68,8 +75,9 @@ struct CaptionStateTests {
     func replaceFinalSourceRefreshesLifetime() {
         let state = CaptionState()
         let base = Date(timeIntervalSinceReferenceDate: 0)
+        let generation = state.volatileGeneration
         state.appendFinalSource("認識結果", at: base)
-        state.replaceFinalSource("認識結果", with: "補正結果", at: base.addingTimeInterval(9))
+        state.replaceFinalSource("認識結果", with: "補正結果", generation: generation, at: base.addingTimeInterval(9))
 
         state.pruneExpired(now: base.addingTimeInterval(CaptionState.lineLifetime + 1))
         #expect(state.sourceLines.map(\.text) == ["補正結果"])

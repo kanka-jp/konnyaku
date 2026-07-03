@@ -45,6 +45,7 @@
 "status.start_failed" = "Failed to start";
 "status.recognition_error" = "Recognition error";
 "status.translation_error" = "Translation error";
+"status.translation_model_not_installed" = "The translation model is not installed";
 "status.vocabulary_error" = "Could not open the custom vocabulary file";
 
 "correction.unavailable.intelligence_off" = "Unavailable because Apple Intelligence is turned off";

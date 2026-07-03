@@ -35,6 +35,10 @@ final class AppController {
     private var isStarting = false
     private var didAttemptAutoStart = false
     private var pendingLanguageRestart = false
+    // setCorrectionEnabled/setRealtimeTranslationEnabled が稼働中に worker だけ差し替える際、
+    // preferLowLatencyTranslation ではなく直近の start() が実際に解決した strategy を使う
+    // (plan() のフォールバックでプリファレンスと食い違うことがあるため)
+    private var activeUseLowLatencyTranslation = false
     // 繰り越し再起動が DL 待機状態の再計画 (start やり直し) まで行うか。DL 要否に
     // 影響しない設定は false で予約し、進行中 DL を捨てない
     private var pendingRestartReplansDownload = false
@@ -92,9 +96,14 @@ final class AppController {
         await languages.loadAvailable()
     }
 
+    // 稼働中はパイプライン全体を再起動せず補正 worker だけ差し替える (体感の途切れ・
+    // prepareTranslation の再実行を避ける)。非稼働中は値の保存のみで、次回 start() が読む。
+    // start/stop 進行中 (isBusy) は pipeline が生成・破棄の途中なので何もしない
     func setCorrectionEnabled(_ enabled: Bool) {
         correctionEnabled = enabled
-        scheduleLanguageRestart()
+        guard state.isRunning, !isBusy, let pipeline else { return }
+        pipeline.updateCorrectionEnabled(
+            enabled, inputLocale: languages.inputLocale, vocabulary: VocabularyStore.load())
     }
 
     func setPreferLowLatencyTranslation(_ enabled: Bool) {
@@ -107,12 +116,17 @@ final class AppController {
         scheduleLanguageRestart()
     }
 
+    // 稼働中はパイプライン全体を再起動せず追従訳 worker だけ差し替える。非稼働中は
+    // 値の保存のみで、次回 start() が読む。start/stop 進行中 (isBusy) は何もしない
     func setRealtimeTranslationEnabled(_ enabled: Bool) {
         realtimeTranslationEnabled = enabled
-        // モデル DL 要否に影響しない設定のため replanDownload = false で予約する
-        // (稼働中・start 進行中は再起動で反映、DL 待機のみの状態では進行中 DL を守り
-        //  保存に留める — DL 完了後の自動 start が最新値を読む)
-        scheduleLanguageRestart(replanDownload: false)
+        guard state.isRunning, !isBusy, let pipeline else { return }
+        pipeline.updateVolatileTranslationEnabled(
+            enabled,
+            inputLanguage: languages.inputLocale.language,
+            outputLanguage: languages.outputLanguage,
+            lowLatency: activeUseLowLatencyTranslation
+        )
     }
 
     func editVocabulary() {
@@ -335,13 +349,19 @@ final class AppController {
         }
 
         var useLowLatencyTranslation = false
+        // translationEnabled が false の間は未使用 (CaptionPipeline.start に渡すだけで
+        // 参照されない)。resolvePair は非同期呼び出しのため、翻訳無効時は省略する
+        var resolvedPair: (source: Locale.Language, target: Locale.Language) =
+            (inputLocale.language, outputLanguage)
         if translationEnabled {
             // 実翻訳セッション (CaptionPipeline の worker) と同じ resolvePair 済みペアで
-            // 可用性を判定し、チェック対象とセッション対象の不一致を防ぐ
+            // 可用性を判定し、チェック対象とセッション対象の不一致を防ぐ。CaptionPipeline
+            // 側にもこのペアをそのまま渡し、worker 内での再解決 (3 重呼び出し) を避ける
             let pair = await TranslationSupport.resolvePair(
                 input: inputLocale.language,
                 output: outputLanguage
             )
+            resolvedPair = pair
             let plan = await TranslationSupport.plan(
                 from: pair.source,
                 to: pair.target,
@@ -396,6 +416,7 @@ final class AppController {
                 break
             }
         }
+        activeUseLowLatencyTranslation = useLowLatencyTranslation
 
         state.reset()
         let pipeline = CaptionPipeline(state: state) { [weak self] in
@@ -417,6 +438,8 @@ final class AppController {
                 volatileTranslationEnabled: realtimeTranslationEnabled,
                 correctionEnabled: correctionEnabled,
                 contextualTerms: VocabularyStore.load(),
+                resolvedSource: resolvedPair.source,
+                resolvedTarget: resolvedPair.target,
                 onSpeechModelDownload: { [weak self] progress in
                     if let progress {
                         self?.beginSpeechModelDownload(progress)
