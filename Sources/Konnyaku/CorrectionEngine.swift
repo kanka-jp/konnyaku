@@ -70,7 +70,7 @@ final class CorrectionEngine {
     // 1 件でなく履歴全体のため、session と同期して蓄積し再作成時に空にする
     private var sessionExchanges: [(raw: String, result: String)] = []
 
-    // session は失敗・履歴 echo 検出時のみ作り直す。会話履歴の蓄積は guardrail 誤発火や
+    // session は失敗・汚染 (履歴 echo / 捏造長文) 検出時のみ作り直す。会話履歴の蓄積は guardrail 誤発火や
     // echo の一因になる (新 session 再試行で回復) 一方、履歴の (原文→補正) ペアが追加
     // few-shot として機能するため、毎回使い捨てると補正出力が崩壊することを eval で実測済み。
     // permissive guardrails も拒否を消す代わりに echo 化するため使わない (eval で実測)
