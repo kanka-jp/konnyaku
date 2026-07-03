@@ -81,13 +81,16 @@ final class CorrectionEngine {
             // なので、復元前のモデル出力層で比較する (復元後比較では復元で変形した
             // 過去出力の echo を取りこぼす)。汚染検出時は履歴を捨てて再試行に落とす
             let isEcho = Self.isEchoOfSessionHistory(corrected, raw: text, history: sessionExchanges)
-            if !isEcho, !Self.isImplausiblyLong(corrected, comparedTo: text) {
+            let isTooLong = Self.isImplausiblyLong(corrected, comparedTo: text)
+            if !isEcho, !isTooLong {
                 sessionExchanges.append((text, corrected))
                 return Self.restoringSentenceEnding(of: corrected, toMatch: text)
             }
-            // 閾値調整の材料になるため、どちらのガードが発火したかをログで区別する
+            // 閾値調整の材料になるため、発火したガードをログで区別する (同時発火は "+" 連結)
+            let cause = [isEcho ? "echo" : nil, isTooLong ? "implausible length" : nil]
+                .compactMap { $0 }.joined(separator: "+")
             debugLog(
-                "correction contaminated (\(isEcho ? "echo" : "implausible length") \(text.count)→\(corrected.count)), retrying with fresh session"
+                "correction contaminated (\(cause) \(text.count)→\(corrected.count)), retrying with fresh session"
             )
         }
         // 停止由来の失敗まで新 session の推論でリトライしない
