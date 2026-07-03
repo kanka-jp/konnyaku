@@ -10,6 +10,7 @@
 "settings.section.translation" = "翻訳";
 "settings.section.display" = "表示";
 "settings.section.correction" = "AI 補正";
+"settings.section.general" = "一般";
 "settings.input_language" = "入力言語 (音声)";
 "settings.output_language" = "出力言語 (翻訳)";
 "settings.translation_strategy" = "翻訳エンジン";
@@ -18,6 +19,7 @@
 "settings.font_size" = "文字サイズ";
 "settings.correction" = "AI で文字起こしを補正";
 "settings.edit_vocabulary" = "カスタム語彙を編集…";
+"settings.auto_start" = "起動時に字幕を自動で開始";
 
 "strategy.low_latency" = "速度優先 (lowLatency)";
 "strategy.high_fidelity" = "品質優先 (highFidelity)";

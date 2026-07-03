@@ -10,6 +10,7 @@
 "settings.section.translation" = "Translation";
 "settings.section.display" = "Display";
 "settings.section.correction" = "AI Refinement";
+"settings.section.general" = "General";
 "settings.input_language" = "Spoken Language";
 "settings.output_language" = "Translation Language";
 "settings.translation_strategy" = "Translation Engine";
@@ -18,6 +19,7 @@
 "settings.font_size" = "Text Size";
 "settings.correction" = "Refine Transcription with AI";
 "settings.edit_vocabulary" = "Edit Custom Vocabulary…";
+"settings.auto_start" = "Start Subtitles Automatically at Launch";
 
 "strategy.low_latency" = "Speed First (Low Latency)";
 "strategy.high_fidelity" = "Quality First (High Fidelity)";

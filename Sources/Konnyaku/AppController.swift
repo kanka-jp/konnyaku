@@ -33,6 +33,7 @@ final class AppController {
     private var pendingDownloadKey: String?
     private var completedDownloadKey: String?
     private var isStarting = false
+    private var didAttemptAutoStart = false
     private var pendingLanguageRestart = false
     // 繰り越し再起動が DL 待機状態の再計画 (start やり直し) まで行うか。DL 要否に
     // 影響しない設定は false で予約し、進行中 DL を捨てない
@@ -56,6 +57,12 @@ final class AppController {
         }
     }
 
+    var autoStartEnabled: Bool {
+        didSet {
+            ConfigStore.set(String(autoStartEnabled), forKey: ConfigStore.autoStartKey)
+        }
+    }
+
     init() {
         // 手編集用の実体を初回起動時から用意する (メニュー変更を待たない)
         try? ConfigStore.ensureFileExists()
@@ -67,6 +74,16 @@ final class AppController {
         // 未設定 (初回) は速度優先を default にする (明示的な false のみ無効化)
         preferLowLatencyTranslation = config[ConfigStore.lowLatencyKey] != "false"
         realtimeTranslationEnabled = config[ConfigStore.realtimeTranslationKey] != "false"
+        autoStartEnabled = config[ConfigStore.autoStartKey] != "false"
+    }
+
+    // メニューバー label の .task (起動時に必ず一度現れる唯一の view) から呼ばれる。
+    // label の再評価で .task が再発火しても開始し直さないよう one-shot にする
+    func autoStartIfEnabled() async {
+        guard !didAttemptAutoStart else { return }
+        didAttemptAutoStart = true
+        guard autoStartEnabled else { return }
+        await start()
     }
 
     func loadLanguages() async {
