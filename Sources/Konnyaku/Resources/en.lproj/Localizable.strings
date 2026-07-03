@@ -32,7 +32,7 @@
 "status.model_download_hint" = "If a system confirmation appears, click \"Download\"";
 "window.model_download_title" = "Translation Model Setup";
 "status.model_download_failed" = "Failed to download the translation model";
-"status.model_download_incomplete" = "The download was reported complete, but the model is still unavailable. Please download it manually in System Settings";
+"status.model_download_incomplete" = "The download was reported complete, but the model is still unavailable. Please download it manually in System Settings, then press \"Start Subtitles\"";
 "alert.open_settings" = "Open System Settings";
 "alert.close" = "Close";
 "status.unsupported_pair" = "Translation is not available for this language pair";
