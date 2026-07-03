@@ -18,6 +18,9 @@ final class AppController {
     var isDownloadingModel: Bool { modelDownloadConfiguration != nil }
     private var isStarting = false
     private var pendingLanguageRestart = false
+    // 繰り越し再起動が DL 待機状態の再計画 (start やり直し) まで行うか。DL 要否に
+    // 影響しない設定は false で予約し、進行中 DL を捨てない
+    private var pendingRestartReplansDownload = false
 
     var correctionEnabled: Bool {
         didSet {
@@ -66,12 +69,10 @@ final class AppController {
 
     func setRealtimeTranslationEnabled(_ enabled: Bool) {
         realtimeTranslationEnabled = enabled
-        // モデル DL 要否に影響しない設定のため、稼働中のみ再起動して反映する。DL 待機中・
-        // start 進行中は保存のみ (次回の start / DL 完了後の自動 start が最新値を読むため、
-        // 繰り越し再起動で進行中 DL を捨てる必要がない)
-        if state.isRunning {
-            scheduleLanguageRestart()
-        }
+        // モデル DL 要否に影響しない設定のため replanDownload = false で予約する
+        // (稼働中・start 進行中は再起動で反映、DL 待機のみの状態では進行中 DL を守り
+        //  保存に留める — DL 完了後の自動 start が最新値を読む)
+        scheduleLanguageRestart(replanDownload: false)
     }
 
     func editVocabulary() {
@@ -241,17 +242,20 @@ final class AppController {
         overlay.hide()
     }
 
-    private func scheduleLanguageRestart() {
+    private func scheduleLanguageRestart(replanDownload: Bool = true) {
         // start 進行中 (モデル準備中等) の変更は isRunning がまだ false で
         // restartIfRunning が no-op になるため、start 完了後の再起動として繰り越す
         if isStarting {
             pendingLanguageRestart = true
+            if replanDownload {
+                pendingRestartReplansDownload = true
+            }
             return
         }
         // 停止処理中の変更は次回 start が最新の言語設定を読むため何もしない
         guard !isBusy else { return }
         Task {
-            await restartIfRunning()
+            await restartIfRunning(replanDownload: replanDownload)
         }
     }
 
@@ -260,20 +264,23 @@ final class AppController {
     private func consumePendingLanguageRestart() {
         guard pendingLanguageRestart else { return }
         pendingLanguageRestart = false
+        let replanDownload = pendingRestartReplansDownload
+        pendingRestartReplansDownload = false
         Task {
-            await restartIfRunning()
+            await restartIfRunning(replanDownload: replanDownload)
         }
     }
 
-    private func restartIfRunning() async {
+    private func restartIfRunning(replanDownload: Bool = true) async {
         if state.isRunning {
             await stop()
             await start()
             return
         }
         // モデル DL 中の言語・strategy 変更は、旧設定のアセットを待たず新設定で
-        // DL からやり直す (start 冒頭の configuration クリアが旧 task を cancel する)
-        if isDownloadingModel {
+        // DL からやり直す (start 冒頭の configuration クリアが旧 task を cancel する)。
+        // DL 要否に影響しない設定 (replanDownload = false) ではやり直さない
+        if isDownloadingModel && replanDownload {
             await start()
         }
     }
