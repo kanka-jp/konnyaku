@@ -19,6 +19,11 @@ final class AppController {
     var isDownloadingModel: Bool { modelDownloadConfiguration != nil }
     // prepareTranslation は進捗 % を公開しないため、経過時間の更新で「進行中」を可視化する
     private(set) var modelDownloadElapsedText: String?
+    // 音声認識モデル DL 中のみ非 nil (AssetInventory の実 Progress、window が determinate 表示)
+    private(set) var speechModelDownloadProgress: Progress?
+    // 中止の判定はエラー型でなく本フラグを SoT にする (progress.cancel() で
+    // downloadAndInstall が投げる cancel エラーの型は文書化されていないため)
+    private var speechModelDownloadCancelledByUser = false
     private var modelDownloadStartedAt: Date?
     private var modelDownloadTicker: Task<Void, Never>?
     private var modelDownloadWindow: NSWindow?
@@ -209,27 +214,58 @@ final class AppController {
     }
 
     private func showModelDownloadWindow() {
-        if modelDownloadWindow == nil {
-            let window = NSWindow(
-                contentViewController: NSHostingController(
-                    rootView: ModelDownloadView(controller: self)))
-            window.title = t("window.model_download_title")
-            // 閉じるボタンは付けない (閉じる = 中止をウィンドウ内の中止ボタンに一本化し、
-            // 「閉じただけで DL 承認フローが死ぬ」誤操作を防ぐ)
-            window.styleMask = [.titled]
-            // overlay (OverlayController) と同じく Space 切替に追従させる
-            // (承認シートごと元の Space に取り残されて「進まない」体験が再発するのを防ぐ)
-            window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-            // macOS 14+ の activate() は cooperative で前面化が保証されないため、
-            // 承認シートの可視性を activation の成否に依存させない
-            window.level = .floating
-            window.isReleasedWhenClosed = false
-            window.center()
-            modelDownloadWindow = window
-        }
-        modelDownloadWindow?.makeKeyAndOrderFront(nil)
+        showDownloadWindow(
+            title: t("window.model_download_title"),
+            rootView: AnyView(ModelDownloadView(controller: self)))
+    }
+
+    private func showDownloadWindow(title: String, rootView: AnyView) {
+        // 呼び出しごとに作り直す (既存 window の再利用だと title/rootView 引数が無視され
+        // 別フローの内容が残る罠になる。全 DL 終了経路が close+nil で破棄する設計とも一致)
+        modelDownloadWindow?.close()
+        let window = NSWindow(
+            contentViewController: NSHostingController(rootView: rootView))
+        window.title = title
+        // 閉じるボタンは付けない (閉じる = 中止をウィンドウ内の中止ボタンに一本化し、
+        // 「閉じただけで DL 承認フローが死ぬ」誤操作を防ぐ)
+        window.styleMask = [.titled]
+        // overlay (OverlayController) と同じく Space 切替に追従させる
+        // (承認シートごと元の Space に取り残されて「進まない」体験が再発するのを防ぐ)
+        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        // macOS 14+ の activate() は cooperative で前面化が保証されないため、
+        // 承認シートの可視性を activation の成否に依存させない
+        window.level = .floating
+        window.isReleasedWhenClosed = false
+        window.center()
+        modelDownloadWindow = window
+        window.makeKeyAndOrderFront(nil)
         // LSUIElement app は自動で前面にならず、承認シートが背後に埋もれるため明示 activate
         NSApp.activate()
+    }
+
+    private func beginSpeechModelDownload(_ progress: Progress) {
+        speechModelDownloadProgress = progress
+        state.statusMessage = t("status.speech_model_downloading")
+        showDownloadWindow(
+            title: t("window.speech_model_download_title"),
+            rootView: AnyView(SpeechModelDownloadView(controller: self)))
+    }
+
+    private func endSpeechModelDownload() {
+        guard speechModelDownloadProgress != nil else { return }
+        speechModelDownloadProgress = nil
+        // DL 完了後も pipeline 起動 (analyzer / audio / worker) は続くため準備中へ戻す
+        // (失敗・成功の最終文言は start() の do/catch が上書きする)
+        state.statusMessage = t("status.preparing")
+        modelDownloadWindow?.close()
+        modelDownloadWindow = nil
+    }
+
+    func cancelSpeechModelDownload() {
+        debugLog("speech model download cancelled by user")
+        // cancel は downloadAndInstall を失敗させ、start() の catch が後始末する
+        speechModelDownloadCancelledByUser = true
+        speechModelDownloadProgress?.cancel()
     }
 
     private func refreshModelDownloadElapsed() {
@@ -353,6 +389,7 @@ final class AppController {
         overlay.setMovable(settings.isMovable)
         do {
             state.statusMessage = t("status.preparing")
+            speechModelDownloadCancelledByUser = false
             try await pipeline.start(
                 inputLocale: inputLocale,
                 outputLanguage: outputLanguage,
@@ -360,11 +397,25 @@ final class AppController {
                 useLowLatencyTranslation: useLowLatencyTranslation,
                 volatileTranslationEnabled: realtimeTranslationEnabled,
                 correctionEnabled: correctionEnabled,
-                contextualTerms: VocabularyStore.load()
+                contextualTerms: VocabularyStore.load(),
+                onSpeechModelDownload: { [weak self] progress in
+                    if let progress {
+                        self?.beginSpeechModelDownload(progress)
+                    } else {
+                        self?.endSpeechModelDownload()
+                    }
+                }
             )
+            endSpeechModelDownload()
             state.statusMessage = nil
         } catch {
-            state.statusMessage = "\(t("status.start_failed")): \(error.localizedDescription)"
+            endSpeechModelDownload()
+            // 音声モデル DL の中止はユーザー操作のためエラー表示しない
+            if error is CancellationError || speechModelDownloadCancelledByUser {
+                state.statusMessage = nil
+            } else {
+                state.statusMessage = "\(t("status.start_failed")): \(error.localizedDescription)"
+            }
             await pipeline.stop()
             overlay.hide()
             self.pipeline = nil
