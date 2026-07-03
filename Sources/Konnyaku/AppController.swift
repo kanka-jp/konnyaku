@@ -66,9 +66,10 @@ final class AppController {
 
     func setRealtimeTranslationEnabled(_ enabled: Bool) {
         realtimeTranslationEnabled = enabled
-        // モデル DL の要否に影響しない設定のため、DL 中は再起動せず保存のみにする
-        // (restartIfRunning が進行中 DL を捨ててやり直すのを避ける。DL 完了後の自動 start が最新値を読む)
-        if state.isRunning || isStarting {
+        // モデル DL 要否に影響しない設定のため、稼働中のみ再起動して反映する。DL 待機中・
+        // start 進行中は保存のみ (次回の start / DL 完了後の自動 start が最新値を読むため、
+        // 繰り越し再起動で進行中 DL を捨てる必要がない)
+        if state.isRunning {
             scheduleLanguageRestart()
         }
     }
