@@ -80,6 +80,9 @@ private struct MenuContent: View {
         Divider()
 
         Button(t("menu.settings")) {
+            // 設定ウィンドウが既に開いて背面にある場合、SettingsView.onAppear は再発火
+            // しない (再挿入されない) ため、メニュー経路ではここでも activate する
+            NSApp.activate()
             openSettings()
         }
 
