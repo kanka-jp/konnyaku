@@ -9,6 +9,7 @@ enum ConfigStore {
     static let lowLatencyKey = "low-latency-translation"
     static let realtimeTranslationKey = "realtime-translation"
     static let correctionKey = "correction"
+    static let autoStartKey = "auto-start"
 
     static var directoryURL: URL {
         let env = ProcessInfo.processInfo.environment["XDG_CONFIG_HOME"]
@@ -48,6 +49,9 @@ enum ConfigStore {
 
     # AI 補正 (Apple Intelligence による書き起こし校正、日本語入力のみ): true / false
     correction = false
+
+    # アプリ起動時に字幕を自動で開始する: true / false
+    auto-start = true
     """
 
     static func load() -> [String: String] {

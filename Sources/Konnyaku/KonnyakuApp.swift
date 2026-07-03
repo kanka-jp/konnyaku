@@ -14,6 +14,9 @@ struct KonnyakuApp: App {
             // 無く DL が始まらないため、ModelDownloadView (専用ウィンドウ) 側に置く
             Image(systemName: menuBarSymbolName)
                 .symbolEffect(.variableColor.iterative, isActive: controller.isDownloadingModel)
+                .task {
+                    controller.autoStartIfEnabled()
+                }
         }
 
         Settings {

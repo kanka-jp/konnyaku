@@ -81,6 +81,13 @@ struct SettingsView: View {
                     controller.editVocabulary()
                 }
             }
+
+            Section(t("settings.section.general")) {
+                Toggle(t("settings.auto_start"), isOn: Binding(
+                    get: { controller.autoStartEnabled },
+                    set: { controller.autoStartEnabled = $0 }
+                ))
+            }
         }
         .formStyle(.grouped)
         .frame(width: 440, height: 480)
