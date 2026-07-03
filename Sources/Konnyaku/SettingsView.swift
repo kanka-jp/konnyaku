@@ -41,8 +41,12 @@ struct SettingsView: View {
                     get: { controller.realtimeTranslationEnabled },
                     set: { controller.setRealtimeTranslationEnabled($0) }
                 )) {
-                    Text(t("settings.realtime_translation"))
-                    Text(t("settings.realtime_translation.help"))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(t("settings.realtime_translation"))
+                        Text(t("settings.realtime_translation.help"))
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
 

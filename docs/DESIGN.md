@@ -36,14 +36,15 @@ AVAudioEngine (mic tap)
   → AsyncStream<AnalyzerInput>
   → TranscriptionEngine (SpeechAnalyzer + SpeechTranscriber, 選択した入力言語)
        volatile 結果 → 上段: 書き起こしを即時表示 (体感 数百 ms)
+                     → 追従訳 worker → 下段: 話し中の追従訳を随時更新 (realtime-translation = false で無効化)
        final 結果   → 翻訳 worker (TranslationSession、選択した出力言語へ)
-                       → 下段: 翻訳を追いかけ表示 (1〜3 秒遅れ、文確定待ちのため構造的)
+                       → 下段: 確定訳で追従訳を置き換え (トグル OFF 時はこの確定訳のみ、文確定待ちで 1〜3 秒遅れ)
   → OverlayController (NSPanel: 透過・最前面・クリック透過・全 Space 追従)
 MenuBarExtra: Start / Stop / オーバーレイ移動 / Quit
 Settings window: 言語選択 / 翻訳 (エンジン・リアルタイム翻訳) / 文字サイズ / AI 補正
 ```
 
-日本語 (即時・暫定) と英語 (確定・追いかけ) の 2 段構成が本アプリの中心的な UX。翻訳は文単位でしか確定できないため英語側の遅延は避けられず、日本語側を即時に出すことで「字幕が動いている」体感を保つ。
+日本語 (即時・暫定) と英語 (追従・確定) の 2 段構成が本アプリの中心的な UX。既定では話し中テキストの追従訳が下段を随時更新し、文確定後に確定訳へ置き換わる (`realtime-translation = false` で文確定待ちのみに切り替え可)。確定訳は文単位でしか得られないため、追従訳と日本語側の即時表示で「字幕が動いている」体感を保つ。
 
 ### モジュール構成
 
