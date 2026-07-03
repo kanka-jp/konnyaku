@@ -2,6 +2,7 @@
 "menu.stop" = "字幕を停止";
 "menu.cancel_download" = "ダウンロードを中止";
 "menu.move_overlay" = "オーバーレイを移動 (ドラッグ)";
+"menu.open_language_settings" = "システム設定から手動でダウンロード… (確実・進捗表示あり)";
 "menu.settings" = "設定…";
 "menu.quit" = "Konnyaku を終了";
 
@@ -27,7 +28,13 @@
 
 "status.mic_denied" = "マイクへのアクセスが許可されていません (システム設定 > プライバシーとセキュリティ)";
 "status.model_downloading" = "翻訳モデルをダウンロード中… (完了すると自動で開始します)";
+"status.model_download_elapsed" = "経過時間: %@";
+"status.model_download_hint" = "システムの確認ダイアログが表示されたら「ダウンロード」を押してください";
+"window.model_download_title" = "翻訳モデルのセットアップ";
 "status.model_download_failed" = "翻訳モデルのダウンロードに失敗しました";
+"status.model_download_incomplete" = "ダウンロードは完了と報告されましたが、モデルがまだ利用できません。システム設定から手動でダウンロードしてください";
+"alert.open_settings" = "システム設定を開く";
+"alert.close" = "閉じる";
 "status.unsupported_pair" = "この言語ペアの翻訳は利用できません";
 "status.preparing" = "音声認識モデルを準備中…";
 "status.start_failed" = "開始に失敗しました";
