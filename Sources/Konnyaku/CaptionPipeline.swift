@@ -36,9 +36,11 @@ final class CaptionPipeline {
         useLowLatencyTranslation: Bool,
         volatileTranslationEnabled: Bool,
         correctionEnabled: Bool,
-        contextualTerms: [String]
+        contextualTerms: [String],
+        onSpeechModelDownload: ((Progress) -> Void)? = nil
     ) async throws {
-        let transcriber = try await transcription.prepare(locale: inputLocale)
+        let transcriber = try await transcription.prepare(
+            locale: inputLocale, onDownloadProgress: onSpeechModelDownload)
         guard let analyzerFormat = transcription.analyzerFormat else {
             throw KonnyakuError.audioFormatUnavailable
         }

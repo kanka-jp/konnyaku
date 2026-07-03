@@ -19,6 +19,8 @@ final class AppController {
     var isDownloadingModel: Bool { modelDownloadConfiguration != nil }
     // prepareTranslation は進捗 % を公開しないため、経過時間の更新で「進行中」を可視化する
     private(set) var modelDownloadElapsedText: String?
+    // 音声認識モデル DL 中のみ非 nil (AssetInventory の実 Progress、window が determinate 表示)
+    private(set) var speechModelDownloadProgress: Progress?
     private var modelDownloadStartedAt: Date?
     private var modelDownloadTicker: Task<Void, Never>?
     private var modelDownloadWindow: NSWindow?
@@ -209,11 +211,16 @@ final class AppController {
     }
 
     private func showModelDownloadWindow() {
+        showDownloadWindow(
+            title: t("window.model_download_title"),
+            rootView: AnyView(ModelDownloadView(controller: self)))
+    }
+
+    private func showDownloadWindow(title: String, rootView: AnyView) {
         if modelDownloadWindow == nil {
             let window = NSWindow(
-                contentViewController: NSHostingController(
-                    rootView: ModelDownloadView(controller: self)))
-            window.title = t("window.model_download_title")
+                contentViewController: NSHostingController(rootView: rootView))
+            window.title = title
             // 閉じるボタンは付けない (閉じる = 中止をウィンドウ内の中止ボタンに一本化し、
             // 「閉じただけで DL 承認フローが死ぬ」誤操作を防ぐ)
             window.styleMask = [.titled]
@@ -230,6 +237,27 @@ final class AppController {
         modelDownloadWindow?.makeKeyAndOrderFront(nil)
         // LSUIElement app は自動で前面にならず、承認シートが背後に埋もれるため明示 activate
         NSApp.activate()
+    }
+
+    private func beginSpeechModelDownload(_ progress: Progress) {
+        speechModelDownloadProgress = progress
+        showDownloadWindow(
+            title: t("window.speech_model_download_title"),
+            rootView: AnyView(SpeechModelDownloadView(controller: self)))
+    }
+
+    private func endSpeechModelDownload() {
+        guard speechModelDownloadProgress != nil else { return }
+        speechModelDownloadProgress = nil
+        modelDownloadWindow?.close()
+        modelDownloadWindow = nil
+    }
+
+    func cancelSpeechModelDownload() {
+        debugLog("speech model download cancelled by user")
+        // cancel は downloadAndInstall を CancellationError で失敗させ、
+        // start() の catch (CancellationError は無表示) が後始末する
+        speechModelDownloadProgress?.cancel()
     }
 
     private func refreshModelDownloadElapsed() {
@@ -360,11 +388,21 @@ final class AppController {
                 useLowLatencyTranslation: useLowLatencyTranslation,
                 volatileTranslationEnabled: realtimeTranslationEnabled,
                 correctionEnabled: correctionEnabled,
-                contextualTerms: VocabularyStore.load()
+                contextualTerms: VocabularyStore.load(),
+                onSpeechModelDownload: { [weak self] progress in
+                    self?.beginSpeechModelDownload(progress)
+                }
             )
+            endSpeechModelDownload()
             state.statusMessage = nil
         } catch {
-            state.statusMessage = "\(t("status.start_failed")): \(error.localizedDescription)"
+            endSpeechModelDownload()
+            // 音声モデル DL の中止 (progress.cancel) はユーザー操作のためエラー表示しない
+            if error is CancellationError {
+                state.statusMessage = nil
+            } else {
+                state.statusMessage = "\(t("status.start_failed")): \(error.localizedDescription)"
+            }
             await pipeline.stop()
             overlay.hide()
             self.pipeline = nil

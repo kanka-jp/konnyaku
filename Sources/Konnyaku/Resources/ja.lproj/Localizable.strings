@@ -38,6 +38,8 @@
 "alert.close" = "閉じる";
 "status.unsupported_pair" = "この言語ペアの翻訳は利用できません";
 "status.preparing" = "音声認識モデルを準備中…";
+"status.speech_model_downloading" = "音声認識モデルをダウンロード中…";
+"window.speech_model_download_title" = "音声認識モデルのセットアップ";
 "status.start_failed" = "開始に失敗しました";
 "status.recognition_error" = "認識エラー";
 "status.translation_error" = "翻訳エラー";

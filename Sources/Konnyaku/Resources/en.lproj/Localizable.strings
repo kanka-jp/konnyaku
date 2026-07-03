@@ -38,6 +38,8 @@
 "alert.close" = "Close";
 "status.unsupported_pair" = "Translation is not available for this language pair";
 "status.preparing" = "Preparing the speech recognition model…";
+"status.speech_model_downloading" = "Downloading the speech recognition model…";
+"window.speech_model_download_title" = "Speech Recognition Model Setup";
 "status.start_failed" = "Failed to start";
 "status.recognition_error" = "Recognition error";
 "status.translation_error" = "Translation error";

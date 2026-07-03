@@ -9,7 +9,10 @@ final class TranscriptionEngine {
     private var analyzer: SpeechAnalyzer?
     private var inputContinuation: AsyncStream<AnalyzerInput>.Continuation?
 
-    func prepare(locale requestedLocale: Locale) async throws -> SpeechTranscriber {
+    func prepare(
+        locale requestedLocale: Locale,
+        onDownloadProgress: ((Progress) -> Void)? = nil
+    ) async throws -> SpeechTranscriber {
         guard let locale = await SpeechTranscriber.supportedLocale(
             equivalentTo: requestedLocale
         ) else {
@@ -24,6 +27,7 @@ final class TranscriptionEngine {
             attributeOptions: []
         )
         if let request = try await AssetInventory.assetInstallationRequest(supporting: [transcriber]) {
+            onDownloadProgress?(request.progress)
             try await request.downloadAndInstall()
         }
         guard let format = await SpeechAnalyzer.bestAvailableAudioFormat(
