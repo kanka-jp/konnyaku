@@ -66,7 +66,11 @@ final class AppController {
 
     func setRealtimeTranslationEnabled(_ enabled: Bool) {
         realtimeTranslationEnabled = enabled
-        scheduleLanguageRestart()
+        // モデル DL の要否に影響しない設定のため、DL 中は再起動せず保存のみにする
+        // (restartIfRunning が進行中 DL を捨ててやり直すのを避ける。DL 完了後の自動 start が最新値を読む)
+        if state.isRunning || isStarting {
+            scheduleLanguageRestart()
+        }
     }
 
     func editVocabulary() {
@@ -151,6 +155,7 @@ final class AppController {
         let outputLanguage = languages.outputLanguage
         let translationEnabled = languages.isTranslationEnabled
         let correctionEnabled = self.correctionEnabled
+        let realtimeTranslationEnabled = self.realtimeTranslationEnabled
 
         guard await AudioCaptureEngine.requestMicrophoneAccess() else {
             state.statusMessage = t("status.mic_denied")

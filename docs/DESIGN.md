@@ -40,7 +40,7 @@ AVAudioEngine (mic tap)
        final 結果   → 翻訳 worker (TranslationSession、選択した出力言語へ)
                        → 下段: 確定訳で追従訳を置き換え (トグル OFF 時はこの確定訳のみ、文確定待ちで 1〜3 秒遅れ)
   → OverlayController (NSPanel: 透過・最前面・クリック透過・全 Space 追従)
-MenuBarExtra: Start / Stop / オーバーレイ移動 / Quit
+MenuBarExtra: Start / Stop / オーバーレイ移動 / 設定 / Quit
 Settings window: 言語選択 / 翻訳 (エンジン・リアルタイム翻訳) / 文字サイズ / AI 補正
 ```
 

@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import Translation
 
@@ -83,6 +84,11 @@ struct SettingsView: View {
         }
         .formStyle(.grouped)
         .frame(width: 440, height: 480)
+        .onAppear {
+            // メニューバー常駐 (LSUIElement) のため、開いた経路によらずここで activate
+            // しないと設定ウィンドウが背面に開く
+            NSApp.activate()
+        }
         .task {
             await controller.loadLanguages()
         }

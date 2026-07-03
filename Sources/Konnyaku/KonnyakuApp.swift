@@ -80,8 +80,6 @@ private struct MenuContent: View {
         Divider()
 
         Button(t("menu.settings")) {
-            // メニューバー常駐 (LSUIElement) のため activate しないと設定ウィンドウが背面に開く
-            NSApp.activate()
             openSettings()
         }
 
