@@ -1,9 +1,16 @@
+import Foundation
 import Testing
 
 @testable import Konnyaku
 
 @MainActor
+@Suite(.serialized)
 struct OverlaySettingsTests {
+    init() {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        setenv("XDG_CONFIG_HOME", tempDir.path, 1)
+    }
+
     @Test
     func increaseFontScaleStepsThroughAllLevelsThenDisallowsFurtherIncrease() {
         let settings = OverlaySettings(config: ["font-scale": "0.7"])
