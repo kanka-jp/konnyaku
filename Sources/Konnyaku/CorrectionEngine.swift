@@ -70,7 +70,7 @@ final class CorrectionEngine {
     // 1 件でなく履歴全体のため、session と同期して蓄積し再作成時に空にする
     private var sessionExchanges: [(raw: String, result: String)] = []
 
-    // session は失敗・履歴 echo 検出時のみ作り直す。会話履歴の蓄積は guardrail 誤発火や
+    // session は失敗・汚染 (履歴 echo / 捏造長文) 検出時のみ作り直す。会話履歴の蓄積は guardrail 誤発火や
     // echo の一因になる (新 session 再試行で回復) 一方、履歴の (原文→補正) ペアが追加
     // few-shot として機能するため、毎回使い捨てると補正出力が崩壊することを eval で実測済み。
     // permissive guardrails も拒否を消す代わりに echo 化するため使わない (eval で実測)
@@ -80,11 +80,18 @@ final class CorrectionEngine {
             // 化ける実害を観測)。echo は session 履歴 = 語尾復元前の出力の再出現
             // なので、復元前のモデル出力層で比較する (復元後比較では復元で変形した
             // 過去出力の echo を取りこぼす)。汚染検出時は履歴を捨てて再試行に落とす
-            if !Self.isEchoOfSessionHistory(corrected, raw: text, history: sessionExchanges) {
+            let isEcho = Self.isEchoOfSessionHistory(corrected, raw: text, history: sessionExchanges)
+            let isTooLong = Self.isImplausiblyLong(corrected, comparedTo: text)
+            if !isEcho, !isTooLong {
                 sessionExchanges.append((text, corrected))
                 return Self.restoringSentenceEnding(of: corrected, toMatch: text)
             }
-            debugLog("correction contaminated (echoed session history), retrying with fresh session")
+            // 閾値調整の材料になるため、発火したガードをログで区別する (同時発火は "+" 連結)
+            let cause = [isEcho ? "echo" : nil, isTooLong ? "implausible length" : nil]
+                .compactMap { $0 }.joined(separator: "+")
+            debugLog(
+                "correction contaminated (\(cause) \(text.count)→\(corrected.count)), retrying with fresh session"
+            )
         }
         // 停止由来の失敗まで新 session の推論でリトライしない
         guard !Task.isCancelled else { return text }
@@ -92,11 +99,17 @@ final class CorrectionEngine {
         sessionExchanges = []
         if let corrected = await attempt(text) {
             // 履歴を持たない fresh session に履歴 echo は起きないため再チェックしない
-            // (過去と同じ補正結果になるのは別入力が同一補正に収束する正当ケース)
-            sessionExchanges.append((text, corrected))
-            return Self.restoringSentenceEnding(of: corrected, toMatch: text)
+            // (過去と同じ補正結果になるのは別入力が同一補正に収束する正当ケース)。
+            // 捏造長文は fresh session でも起きるため長さガードだけは再適用する
+            if !Self.isImplausiblyLong(corrected, comparedTo: text) {
+                sessionExchanges.append((text, corrected))
+                return Self.restoringSentenceEnding(of: corrected, toMatch: text)
+            }
+            debugLog(
+                "correction contaminated (implausible length \(text.count)→\(corrected.count) from fresh session), falling back to raw"
+            )
         }
-        // 失敗した session を次の文へ持ち越さない
+        // 失敗・汚染した session を次の文へ持ち越さない
         session = LanguageModelSession(instructions: instructions)
         sessionExchanges = []
         return text
@@ -112,6 +125,13 @@ final class CorrectionEngine {
         history: [(raw: String, result: String)]
     ) -> Bool {
         history.contains { $0.result == result && $0.raw != raw }
+    }
+
+    // 正当な補正は filler 除去 (短縮)・同音異義語修正 (同長)・句読点付与 (数文字増) のみで、
+    // それを大きく超える伸長は小型モデルの捏造 (9 文字入力 → 379 文字出力の実害を観測)。
+    // 定数項はごく短い入力 (「はい」等) への句読点付与を誤検出しないための下駄
+    static func isImplausiblyLong(_ result: String, comparedTo raw: String) -> Bool {
+        result.count > raw.count * 2 + 12
     }
 
     // 話者の文体 (常体) を保つため、原文が常体で終わるのにモデル出力が対応する
