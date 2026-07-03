@@ -44,12 +44,11 @@ enum TranslationSupport {
         preferLowLatency: Bool
     ) async -> Plan {
         if preferLowLatency, #available(macOS 26.4, *) {
-            let status = await LanguageAvailability(preferredStrategy: .lowLatency)
+            let lowLatency = await LanguageAvailability(preferredStrategy: .lowLatency)
                 .status(from: source, to: target)
-            debugLog("lowLatency availability: \(String(describing: status))")
-            if status != .unsupported {
-                return Plan(status: status, usesLowLatency: true)
-            }
+            debugLog("lowLatency availability: \(String(describing: lowLatency))")
+            let fallback = await LanguageAvailability().status(from: source, to: target)
+            return resolvePlan(lowLatency: lowLatency, fallback: fallback)
         }
         return Plan(
             status: await LanguageAvailability().status(from: source, to: target),
@@ -57,8 +56,44 @@ enum TranslationSupport {
         )
     }
 
+    // lowLatency 優先時の戦略決定 (純関数、テスト対象)。lowLatency 未インストールでも
+    // highFidelity が installed なら DL を挟まず即開始する。lowLatency の
+    // prepareTranslation はアセットを installed にしないまま成功を返すことがあり
+    // (zh→en で実測)、DL を優先すると「DL 成功 → 自動開始 → 再判定 → 再 DL」の
+    // 無限ループになる
+    static func resolvePlan(
+        lowLatency: LanguageAvailability.Status, fallback: LanguageAvailability.Status
+    ) -> Plan {
+        if lowLatency == .installed {
+            return Plan(status: .installed, usesLowLatency: true)
+        }
+        if fallback == .installed {
+            return Plan(status: .installed, usesLowLatency: false)
+        }
+        if lowLatency != .unsupported {
+            return Plan(status: lowLatency, usesLowLatency: true)
+        }
+        return Plan(status: fallback, usesLowLatency: false)
+    }
+
     static func supportedTargetLanguages() async -> [Locale.Language] {
         await LanguageAvailability().supportedLanguages
+    }
+
+    // DL 完了 polling 用。plan() と違い debugLog を出さない (毎秒 tick からの呼び出しで
+    // ログが埋まるため)
+    static func isInstalled(
+        source: Locale.Language, target: Locale.Language, lowLatency: Bool
+    ) async -> Bool {
+        if lowLatency, #available(macOS 26.4, *),
+            await LanguageAvailability(preferredStrategy: .lowLatency)
+                .status(from: source, to: target) == .installed
+        {
+            return true
+        }
+        // resolvePlan の highFidelity fallback と対: 既定アセットが installed になれば
+        // 開始可能なため、polling も既定アセットの完了を DL 完了として扱う
+        return await LanguageAvailability().status(from: source, to: target) == .installed
     }
 
     // 翻訳アセットは地域付き識別子 (ja-JP / en-US 等) 単位で管理されるため、

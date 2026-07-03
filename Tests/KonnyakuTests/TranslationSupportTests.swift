@@ -52,4 +52,34 @@ struct TranslationSupportTests {
         let resolved = TranslationSupport.resolveVariant(of: input, in: supported)
         #expect(resolved == input)
     }
+
+    // resolvePlan の loop 回避決定: highFidelity が installed なら lowLatency が
+    // .supported でも DL を予約しない (zh→en で実測した無限 DL ループの regression guard)
+    @Test
+    func resolvePlanPrefersInstalledFallbackOverDownloadableLowLatency() {
+        let plan = TranslationSupport.resolvePlan(lowLatency: .supported, fallback: .installed)
+        #expect(plan.status == .installed)
+        #expect(plan.usesLowLatency == false)
+    }
+
+    @Test
+    func resolvePlanUsesInstalledLowLatencyFirst() {
+        let plan = TranslationSupport.resolvePlan(lowLatency: .installed, fallback: .installed)
+        #expect(plan.status == .installed)
+        #expect(plan.usesLowLatency == true)
+    }
+
+    @Test
+    func resolvePlanDownloadsLowLatencyWhenNothingInstalled() {
+        let plan = TranslationSupport.resolvePlan(lowLatency: .supported, fallback: .supported)
+        #expect(plan.status == .supported)
+        #expect(plan.usesLowLatency == true)
+    }
+
+    @Test
+    func resolvePlanFallsBackToHighFidelityWhenLowLatencyUnsupported() {
+        let plan = TranslationSupport.resolvePlan(lowLatency: .unsupported, fallback: .supported)
+        #expect(plan.status == .supported)
+        #expect(plan.usesLowLatency == false)
+    }
 }

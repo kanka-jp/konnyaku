@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import Observation
+import SwiftUI
 import Translation
 
 @MainActor
@@ -13,9 +14,19 @@ final class AppController {
     private let overlay = OverlayController()
     private var pipeline: CaptionPipeline?
     private(set) var isBusy = false
-    // 非 nil の間、KonnyakuApp の translationTask がモデル DL を実行する
+    // 非 nil の間、ModelDownloadView の translationTask がモデル DL を実行する
     private(set) var modelDownloadConfiguration: TranslationSession.Configuration?
     var isDownloadingModel: Bool { modelDownloadConfiguration != nil }
+    // prepareTranslation は進捗 % を公開しないため、経過時間の更新で「進行中」を可視化する
+    private(set) var modelDownloadElapsedText: String?
+    private var modelDownloadStartedAt: Date?
+    private var modelDownloadTicker: Task<Void, Never>?
+    private var modelDownloadWindow: NSWindow?
+    // prepareTranslation が成功を返してもアセットが installed にならない環境があり、
+    // 成功後の自動再開が同一 DL を無限に繰り返す (実測ループ)。成功済みの DL キーを
+    // 覚えておき、自動再開の再スケジュールだけを遮断する (ユーザー起点の開始は許可)
+    private var pendingDownloadKey: String?
+    private var completedDownloadKey: String?
     private var isStarting = false
     private var pendingLanguageRestart = false
     // 繰り越し再起動が DL 待機状態の再計画 (start やり直し) まで行うか。DL 要否に
@@ -64,6 +75,11 @@ final class AppController {
 
     func setPreferLowLatencyTranslation(_ enabled: Bool) {
         preferLowLatencyTranslation = enabled
+        // 言語・strategy の変更はユーザー起点のため、ループ遮断キーをリセットして
+        // 新設定での DL 再試行を許可する (toggle と同じ契約。scheduleLanguageRestart
+        // 側でクリアすると correction 変更や succeeded 直後の自動 start と競合する
+        // 割り込みでも消えてしまい、遮断をすり抜ける)
+        completedDownloadKey = nil
         scheduleLanguageRestart()
     }
 
@@ -91,21 +107,26 @@ final class AppController {
 
     func setInputLanguage(_ identifier: String) {
         languages.inputLocaleIdentifier = identifier
+        completedDownloadKey = nil
         scheduleLanguageRestart()
     }
 
     func setOutputLanguage(_ identifier: String) {
         languages.outputLanguageIdentifier = identifier
+        completedDownloadKey = nil
         scheduleLanguageRestart()
     }
 
-    // KonnyakuApp の translationTask (prepareTranslation 実行元) から結果を受け取る。
+    // ModelDownloadView の translationTask (prepareTranslation 実行元) から結果を受け取る。
     // DL 中の設定変更で configuration が差し替わった後に旧 task の完了が届くことが
     // あるため、発火時の configuration と現在値の一致を guard する (stale 上書き防止)
     func modelDownloadSucceeded(for configuration: TranslationSession.Configuration?) {
         guard configuration == modelDownloadConfiguration else { return }
         debugLog("model download done, auto-starting captions")
         modelDownloadConfiguration = nil
+        completedDownloadKey = pendingDownloadKey
+        pendingDownloadKey = nil
+        endModelDownloadProgress()
         state.statusMessage = nil
         // nil 代入は translationTask (この通知の呼び出し元) 自身を cancel するため、
         // 自動開始はその cancel を継承しない独立 Task で行う
@@ -118,13 +139,104 @@ final class AppController {
         guard configuration == modelDownloadConfiguration else { return }
         debugLog("model download failed: \(error)")
         modelDownloadConfiguration = nil
+        pendingDownloadKey = nil
+        endModelDownloadProgress()
         state.statusMessage = "\(t("status.model_download_failed")): \(error.localizedDescription)"
+        // DL の主 UI (セットアップウィンドウ) が黙って消えると失敗理由がメニューを
+        // 開くまで見えないため、alert で明示する
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = t("status.model_download_failed")
+        alert.informativeText = error.localizedDescription
+        NSApp.activate()
+        alert.runModal()
     }
 
     func cancelModelDownload() {
         debugLog("model download cancelled by user")
         modelDownloadConfiguration = nil
+        pendingDownloadKey = nil
+        endModelDownloadProgress()
         state.statusMessage = nil
+    }
+
+    // アプリ起点の自動 DL は停滞しうる (LSUIElement で承認ダイアログが埋もれる /
+    // background 優先度) ため、確実に進む手動 DL (進捗バー付き) への導線を出す
+    func openTranslationLanguageSettings() {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.Localization-Settings.extension")
+        else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    private func beginModelDownloadProgress(
+        source: Locale.Language, target: Locale.Language, lowLatency: Bool
+    ) {
+        modelDownloadStartedAt = Date()
+        refreshModelDownloadElapsed()
+        modelDownloadTicker?.cancel()
+        let configuration = modelDownloadConfiguration
+        modelDownloadTicker = Task { [weak self] in
+            var tick = 0
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1))
+                guard let self, !Task.isCancelled else { return }
+                self.refreshModelDownloadElapsed()
+                // システム設定からの手動 DL で完了した場合 prepareTranslation が解決しない
+                // ことがあるため、installed への遷移を polling で検知して自動開始につなぐ
+                tick += 1
+                if tick % 5 == 0,
+                    await TranslationSupport.isInstalled(
+                        source: source, target: target, lowLatency: lowLatency)
+                {
+                    debugLog("model install detected via availability polling")
+                    self.modelDownloadSucceeded(for: configuration)
+                    return
+                }
+            }
+        }
+        showModelDownloadWindow()
+    }
+
+    private func endModelDownloadProgress() {
+        modelDownloadTicker?.cancel()
+        modelDownloadTicker = nil
+        modelDownloadStartedAt = nil
+        modelDownloadElapsedText = nil
+        // ウィンドウは使い捨てて次回 DL で作り直す (orderOut で温存すると view 階層が
+        // 常駐し続けるうえ、非表示ウィンドウ上での translationTask 再発火が未検証経路になる)
+        modelDownloadWindow?.close()
+        modelDownloadWindow = nil
+    }
+
+    private func showModelDownloadWindow() {
+        if modelDownloadWindow == nil {
+            let window = NSWindow(
+                contentViewController: NSHostingController(
+                    rootView: ModelDownloadView(controller: self)))
+            window.title = t("window.model_download_title")
+            // 閉じるボタンは付けない (閉じる = 中止をウィンドウ内の中止ボタンに一本化し、
+            // 「閉じただけで DL 承認フローが死ぬ」誤操作を防ぐ)
+            window.styleMask = [.titled]
+            // overlay (OverlayController) と同じく Space 切替に追従させる
+            // (承認シートごと元の Space に取り残されて「進まない」体験が再発するのを防ぐ)
+            window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+            // macOS 14+ の activate() は cooperative で前面化が保証されないため、
+            // 承認シートの可視性を activation の成否に依存させない
+            window.level = .floating
+            window.isReleasedWhenClosed = false
+            window.center()
+            modelDownloadWindow = window
+        }
+        modelDownloadWindow?.makeKeyAndOrderFront(nil)
+        // LSUIElement app は自動で前面にならず、承認シートが背後に埋もれるため明示 activate
+        NSApp.activate()
+    }
+
+    private func refreshModelDownloadElapsed() {
+        guard let startedAt = modelDownloadStartedAt else { return }
+        let seconds = max(0, Int(Date().timeIntervalSince(startedAt)))
+        modelDownloadElapsedText = Duration.seconds(seconds).formatted(
+            .time(pattern: seconds >= 3600 ? .hourMinuteSecond : .minuteSecond))
     }
 
     func toggle() async {
@@ -134,6 +246,8 @@ final class AppController {
             // DL 中の再押下は中止として扱う (再開扱いで進捗を捨てる誤操作を防ぐ)
             cancelModelDownload()
         } else {
+            // ユーザー起点の開始はループ遮断の対象外にして明示リトライを常に許可する
+            completedDownloadKey = nil
             await start()
         }
     }
@@ -150,6 +264,7 @@ final class AppController {
         state.statusMessage = nil
         // 開始し直すたびに最新の言語・strategy 設定で DL 要否を再判定する
         modelDownloadConfiguration = nil
+        endModelDownloadProgress()
 
         // start 全体で同じ設定を使う (途中の変更は pendingLanguageRestart 経由の
         // 再起動で反映し、チェック済み設定と起動設定の食い違いを防ぐ)
@@ -182,10 +297,30 @@ final class AppController {
             case .installed:
                 break
             case .supported:
-                // popup を挟まず自動 DL に入る。進捗はメニューバーアイコンと
-                // status 文言で表現し、完了後は modelDownloadSucceeded が自動開始する
+                let downloadKey =
+                    "\(pair.source.maximalIdentifier)->\(pair.target.maximalIdentifier)|\(plan.usesLowLatency)"
+                if downloadKey == completedDownloadKey {
+                    // 成功報告済みの DL なのに installed に遷移していない。再スケジュール
+                    // しても同じ結果の無限ループになるため、ここで止めて手動 DL へ誘導する
+                    debugLog("download loop breaker fired: \(downloadKey)")
+                    state.statusMessage = t("status.model_download_incomplete")
+                    let alert = NSAlert()
+                    alert.alertStyle = .warning
+                    alert.messageText = t("alert.model_unavailable_title")
+                    alert.informativeText = t("status.model_download_incomplete")
+                    // メニューの手動 DL ボタンは DL 中しか出ないため、案内先への導線を
+                    // alert 自身に持たせる
+                    alert.addButton(withTitle: t("alert.open_settings"))
+                    alert.addButton(withTitle: t("alert.close"))
+                    NSApp.activate()
+                    if alert.runModal() == .alertFirstButtonReturn {
+                        openTranslationLanguageSettings()
+                    }
+                    return
+                }
+                // popup を挟まず自動 DL に入る。DL 中の表示は MenuContent が
+                // isDownloadingModel から組み立て、完了後は modelDownloadSucceeded が自動開始する
                 debugLog("model not installed, scheduling auto-download (lowLatency: \(plan.usesLowLatency))")
-                state.statusMessage = t("status.model_downloading")
                 var configuration = TranslationSupport.makeSetupConfiguration(
                     source: pair.source,
                     target: pair.target,
@@ -195,6 +330,9 @@ final class AppController {
                 // 再発火しないため、version を進めて常に新しい値として扱わせる
                 configuration.invalidate()
                 modelDownloadConfiguration = configuration
+                pendingDownloadKey = downloadKey
+                beginModelDownloadProgress(
+                    source: pair.source, target: pair.target, lowLatency: plan.usesLowLatency)
                 return
             case .unsupported:
                 state.statusMessage = t("status.unsupported_pair")

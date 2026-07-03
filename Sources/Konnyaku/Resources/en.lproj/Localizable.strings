@@ -2,6 +2,7 @@
 "menu.stop" = "Stop Subtitles";
 "menu.cancel_download" = "Cancel Download";
 "menu.move_overlay" = "Move Overlay (Drag)";
+"menu.open_language_settings" = "Download Manually in System Settings… (reliable, shows progress)";
 "menu.settings" = "Settings…";
 "menu.quit" = "Quit Konnyaku";
 
@@ -27,7 +28,14 @@
 
 "status.mic_denied" = "Microphone access is not allowed (System Settings > Privacy & Security)";
 "status.model_downloading" = "Downloading the translation model… (subtitles start automatically when done)";
+"status.model_download_elapsed" = "Elapsed: %@";
+"status.model_download_hint" = "If a system confirmation appears, click \"Download\"";
+"window.model_download_title" = "Translation Model Setup";
 "status.model_download_failed" = "Failed to download the translation model";
+"status.model_download_incomplete" = "The download was reported complete, but the model is still unavailable. Please download it manually in System Settings, then press \"Start Subtitles\"";
+"alert.model_unavailable_title" = "Translation Model Not Available";
+"alert.open_settings" = "Open System Settings";
+"alert.close" = "Close";
 "status.unsupported_pair" = "Translation is not available for this language pair";
 "status.preparing" = "Preparing the speech recognition model…";
 "status.start_failed" = "Failed to start";

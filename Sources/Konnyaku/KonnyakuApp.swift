@@ -10,28 +10,10 @@ struct KonnyakuApp: App {
         MenuBarExtra {
             MenuContent(controller: controller)
         } label: {
-            // label は常駐 view のため、モデル DL の translationTask をここに載せると
-            // メニューを開かなくてもバックグラウンドで DL が進む。
-            // translationTask に渡した値そのものを closure に capture させ、完了通知の
-            // 一致検証 (stale 上書き防止) が「この task を起動した configuration」と
-            // 常に対応するようにする (closure 内で controller から読み直すと、差し替え
-            // 直後の実行で新 configuration を拾う race がある)
-            let downloadConfiguration = controller.modelDownloadConfiguration
+            // DL の translationTask を label に載せると承認シートの attach 先ウィンドウが
+            // 無く DL が始まらないため、ModelDownloadView (専用ウィンドウ) 側に置く
             Image(systemName: menuBarSymbolName)
-                .translationTask(downloadConfiguration) { session in
-                    // session はこの closure 内で逐次アクセスのみのため、isolation checking を
-                    // 外して nonisolated な prepareTranslation へ渡してよい
-                    nonisolated(unsafe) let session = session
-                    debugLog("model download started")
-                    do {
-                        try await session.prepareTranslation()
-                        guard !Task.isCancelled else { return }
-                        controller.modelDownloadSucceeded(for: downloadConfiguration)
-                    } catch {
-                        guard !(error is CancellationError), !Task.isCancelled else { return }
-                        controller.modelDownloadFailed(error, for: downloadConfiguration)
-                    }
-                }
+                .symbolEffect(.variableColor.iterative, isActive: controller.isDownloadingModel)
         }
 
         Settings {
@@ -64,6 +46,16 @@ private struct MenuContent: View {
             }
         }
         .disabled(controller.isBusy)
+
+        if controller.isDownloadingModel {
+            Text(t("status.model_downloading"))
+            if let elapsed = controller.modelDownloadElapsedText {
+                Text(String(format: t("status.model_download_elapsed"), elapsed))
+            }
+            Button(t("menu.open_language_settings")) {
+                controller.openTranslationLanguageSettings()
+            }
+        }
 
         if let message = controller.state.statusMessage {
             Text(message)
