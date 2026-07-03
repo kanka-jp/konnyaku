@@ -21,6 +21,9 @@ final class AppController {
     private(set) var modelDownloadElapsedText: String?
     // 音声認識モデル DL 中のみ非 nil (AssetInventory の実 Progress、window が determinate 表示)
     private(set) var speechModelDownloadProgress: Progress?
+    // 中止の判定はエラー型でなく本フラグを SoT にする (progress.cancel() で
+    // downloadAndInstall が投げる cancel エラーの型は文書化されていないため)
+    private var speechModelDownloadCancelledByUser = false
     private var modelDownloadStartedAt: Date?
     private var modelDownloadTicker: Task<Void, Never>?
     private var modelDownloadWindow: NSWindow?
@@ -241,6 +244,7 @@ final class AppController {
 
     private func beginSpeechModelDownload(_ progress: Progress) {
         speechModelDownloadProgress = progress
+        state.statusMessage = t("status.speech_model_downloading")
         showDownloadWindow(
             title: t("window.speech_model_download_title"),
             rootView: AnyView(SpeechModelDownloadView(controller: self)))
@@ -249,14 +253,17 @@ final class AppController {
     private func endSpeechModelDownload() {
         guard speechModelDownloadProgress != nil else { return }
         speechModelDownloadProgress = nil
+        // DL 完了後も pipeline 起動 (analyzer / audio / worker) は続くため準備中へ戻す
+        // (失敗・成功の最終文言は start() の do/catch が上書きする)
+        state.statusMessage = t("status.preparing")
         modelDownloadWindow?.close()
         modelDownloadWindow = nil
     }
 
     func cancelSpeechModelDownload() {
         debugLog("speech model download cancelled by user")
-        // cancel は downloadAndInstall を CancellationError で失敗させ、
-        // start() の catch (CancellationError は無表示) が後始末する
+        // cancel は downloadAndInstall を失敗させ、start() の catch が後始末する
+        speechModelDownloadCancelledByUser = true
         speechModelDownloadProgress?.cancel()
     }
 
@@ -381,6 +388,7 @@ final class AppController {
         overlay.setMovable(settings.isMovable)
         do {
             state.statusMessage = t("status.preparing")
+            speechModelDownloadCancelledByUser = false
             try await pipeline.start(
                 inputLocale: inputLocale,
                 outputLanguage: outputLanguage,
@@ -390,15 +398,19 @@ final class AppController {
                 correctionEnabled: correctionEnabled,
                 contextualTerms: VocabularyStore.load(),
                 onSpeechModelDownload: { [weak self] progress in
-                    self?.beginSpeechModelDownload(progress)
+                    if let progress {
+                        self?.beginSpeechModelDownload(progress)
+                    } else {
+                        self?.endSpeechModelDownload()
+                    }
                 }
             )
             endSpeechModelDownload()
             state.statusMessage = nil
         } catch {
             endSpeechModelDownload()
-            // 音声モデル DL の中止 (progress.cancel) はユーザー操作のためエラー表示しない
-            if error is CancellationError {
+            // 音声モデル DL の中止はユーザー操作のためエラー表示しない
+            if error is CancellationError || speechModelDownloadCancelledByUser {
                 state.statusMessage = nil
             } else {
                 state.statusMessage = "\(t("status.start_failed")): \(error.localizedDescription)"
