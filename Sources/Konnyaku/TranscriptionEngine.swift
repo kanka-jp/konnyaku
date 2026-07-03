@@ -9,8 +9,9 @@ final class TranscriptionEngine {
     private var analyzer: SpeechAnalyzer?
     private var inputContinuation: AsyncStream<AnalyzerInput>.Continuation?
 
-    // onDownloadProgress は DL 開始時に request の Progress を、完了時に nil を渡す
-    // (nil 通知が無いと呼び出し側は pipeline 起動全体の完了までウィンドウを閉じられない)
+    // onDownloadProgress は DL 開始時に request の Progress を、終了時 (成功・失敗とも)
+    // に nil を渡す (nil 通知が無いと呼び出し側は pipeline 起動全体の完了まで
+    // ウィンドウを閉じられない)
     func prepare(
         locale requestedLocale: Locale,
         onDownloadProgress: (@MainActor (Progress?) -> Void)? = nil
@@ -30,8 +31,8 @@ final class TranscriptionEngine {
         )
         if let request = try await AssetInventory.assetInstallationRequest(supporting: [transcriber]) {
             onDownloadProgress?(request.progress)
+            defer { onDownloadProgress?(nil) }
             try await request.downloadAndInstall()
-            onDownloadProgress?(nil)
         }
         guard let format = await SpeechAnalyzer.bestAvailableAudioFormat(
             compatibleWith: [transcriber]
