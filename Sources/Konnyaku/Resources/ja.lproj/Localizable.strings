@@ -2,13 +2,21 @@
 "menu.stop" = "字幕を停止";
 "menu.cancel_download" = "ダウンロードを中止";
 "menu.move_overlay" = "オーバーレイを移動 (ドラッグ)";
-"menu.font_size" = "文字サイズ";
-"menu.input_language" = "入力言語 (音声)";
-"menu.output_language" = "出力言語 (翻訳)";
-"menu.translation_strategy" = "翻訳エンジン";
-"menu.correction" = "AI で文字起こしを補正";
-"menu.edit_vocabulary" = "カスタム語彙を編集…";
+"menu.settings" = "設定…";
 "menu.quit" = "Konnyaku を終了";
+
+"settings.section.language" = "言語";
+"settings.section.translation" = "翻訳";
+"settings.section.display" = "表示";
+"settings.section.correction" = "AI 補正";
+"settings.input_language" = "入力言語 (音声)";
+"settings.output_language" = "出力言語 (翻訳)";
+"settings.translation_strategy" = "翻訳エンジン";
+"settings.realtime_translation" = "話し中のリアルタイム翻訳";
+"settings.realtime_translation.help" = "オフにすると文の確定を待ってから翻訳します";
+"settings.font_size" = "文字サイズ";
+"settings.correction" = "AI で文字起こしを補正";
+"settings.edit_vocabulary" = "カスタム語彙を編集…";
 
 "strategy.low_latency" = "速度優先 (lowLatency)";
 "strategy.high_fidelity" = "品質優先 (highFidelity)";

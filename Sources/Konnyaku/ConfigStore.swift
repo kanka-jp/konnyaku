@@ -7,6 +7,7 @@ enum ConfigStore {
     static let outputLanguageKey = "output-language"
     static let fontScaleKey = "font-scale"
     static let lowLatencyKey = "low-latency-translation"
+    static let realtimeTranslationKey = "realtime-translation"
     static let correctionKey = "correction"
 
     static var directoryURL: URL {
@@ -28,7 +29,7 @@ enum ConfigStore {
 
     static let template = """
     # Konnyaku 設定 (書式: key = value、「#」で始まる行はコメント)
-    # メニューからの変更もこのファイルへ書き戻されます。手編集は次回起動時に反映されます
+    # 設定画面からの変更もこのファイルへ書き戻されます。手編集は次回起動時に反映されます
 
     # 入力言語 (音声認識) の BCP-47 識別子
     input-language = ja-JP
@@ -41,6 +42,9 @@ enum ConfigStore {
 
     # 低遅延翻訳 (lowLatency strategy、対応言語ペアのみ) を優先する: true / false
     low-latency-translation = true
+
+    # 話し中テキストのリアルタイム翻訳 (false なら文の確定を待って翻訳): true / false
+    realtime-translation = true
 
     # AI 補正 (Apple Intelligence による書き起こし校正、日本語入力のみ): true / false
     correction = false
