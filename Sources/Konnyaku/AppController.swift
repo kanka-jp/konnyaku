@@ -260,7 +260,8 @@ final class AppController {
     }
 
     // start の全終了経路で繰り越しを消費する。実行可否は restartIfRunning に一本化する
-    // (稼働中と DL 中は新設定でやり直し、mic 拒否等の素の早期 return では何もしない)
+    // (稼働中は新設定でやり直し、DL 中のやり直しは replanDownload に従い、mic 拒否等の
+    //  素の早期 return では何もしない)
     private func consumePendingLanguageRestart() {
         guard pendingLanguageRestart else { return }
         pendingLanguageRestart = false
