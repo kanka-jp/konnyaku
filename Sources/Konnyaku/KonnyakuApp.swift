@@ -15,7 +15,7 @@ struct KonnyakuApp: App {
             Image(systemName: menuBarSymbolName)
                 .symbolEffect(.variableColor.iterative, isActive: controller.isDownloadingModel)
                 .task {
-                    await controller.autoStartIfEnabled()
+                    controller.autoStartIfEnabled()
                 }
         }
 

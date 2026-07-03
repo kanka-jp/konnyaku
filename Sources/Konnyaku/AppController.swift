@@ -79,11 +79,13 @@ final class AppController {
 
     // メニューバー label の .task (起動時に必ず一度現れる唯一の view) から呼ばれる。
     // label の再評価で .task が再発火しても開始し直さないよう one-shot にする
-    func autoStartIfEnabled() async {
+    func autoStartIfEnabled() {
         guard !didAttemptAutoStart else { return }
         didAttemptAutoStart = true
         guard autoStartEnabled else { return }
-        await start()
+        // start() が .task の cancel を継承すると DL 中断後に didAttemptAutoStart で
+        // 再試行も塞がれるため、独立 Task で開始する (modelDownloadSucceeded と同じ)
+        Task { await start() }
     }
 
     func loadLanguages() async {
