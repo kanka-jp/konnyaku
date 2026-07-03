@@ -13,7 +13,7 @@ final class TranscriptionEngine {
     // (nil 通知が無いと呼び出し側は pipeline 起動全体の完了までウィンドウを閉じられない)
     func prepare(
         locale requestedLocale: Locale,
-        onDownloadProgress: ((Progress?) -> Void)? = nil
+        onDownloadProgress: (@MainActor (Progress?) -> Void)? = nil
     ) async throws -> SpeechTranscriber {
         guard let locale = await SpeechTranscriber.supportedLocale(
             equivalentTo: requestedLocale

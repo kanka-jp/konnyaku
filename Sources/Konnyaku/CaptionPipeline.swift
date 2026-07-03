@@ -37,7 +37,7 @@ final class CaptionPipeline {
         volatileTranslationEnabled: Bool,
         correctionEnabled: Bool,
         contextualTerms: [String],
-        onSpeechModelDownload: ((Progress?) -> Void)? = nil
+        onSpeechModelDownload: (@MainActor (Progress?) -> Void)? = nil
     ) async throws {
         let transcriber = try await transcription.prepare(
             locale: inputLocale, onDownloadProgress: onSpeechModelDownload)

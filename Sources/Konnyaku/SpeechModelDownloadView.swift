@@ -10,6 +10,7 @@ struct SpeechModelDownloadView: View {
             Text(t("status.speech_model_downloading"))
             if let progress = controller.speechModelDownloadProgress {
                 ProgressView(progress)
+                    .progressViewStyle(.linear)
             }
             Button(t("menu.cancel_download")) {
                 controller.cancelSpeechModelDownload()

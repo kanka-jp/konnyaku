@@ -220,24 +220,25 @@ final class AppController {
     }
 
     private func showDownloadWindow(title: String, rootView: AnyView) {
-        if modelDownloadWindow == nil {
-            let window = NSWindow(
-                contentViewController: NSHostingController(rootView: rootView))
-            window.title = title
-            // 閉じるボタンは付けない (閉じる = 中止をウィンドウ内の中止ボタンに一本化し、
-            // 「閉じただけで DL 承認フローが死ぬ」誤操作を防ぐ)
-            window.styleMask = [.titled]
-            // overlay (OverlayController) と同じく Space 切替に追従させる
-            // (承認シートごと元の Space に取り残されて「進まない」体験が再発するのを防ぐ)
-            window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-            // macOS 14+ の activate() は cooperative で前面化が保証されないため、
-            // 承認シートの可視性を activation の成否に依存させない
-            window.level = .floating
-            window.isReleasedWhenClosed = false
-            window.center()
-            modelDownloadWindow = window
-        }
-        modelDownloadWindow?.makeKeyAndOrderFront(nil)
+        // 呼び出しごとに作り直す (既存 window の再利用だと title/rootView 引数が無視され
+        // 別フローの内容が残る罠になる。全 DL 終了経路が close+nil で破棄する設計とも一致)
+        modelDownloadWindow?.close()
+        let window = NSWindow(
+            contentViewController: NSHostingController(rootView: rootView))
+        window.title = title
+        // 閉じるボタンは付けない (閉じる = 中止をウィンドウ内の中止ボタンに一本化し、
+        // 「閉じただけで DL 承認フローが死ぬ」誤操作を防ぐ)
+        window.styleMask = [.titled]
+        // overlay (OverlayController) と同じく Space 切替に追従させる
+        // (承認シートごと元の Space に取り残されて「進まない」体験が再発するのを防ぐ)
+        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        // macOS 14+ の activate() は cooperative で前面化が保証されないため、
+        // 承認シートの可視性を activation の成否に依存させない
+        window.level = .floating
+        window.isReleasedWhenClosed = false
+        window.center()
+        modelDownloadWindow = window
+        window.makeKeyAndOrderFront(nil)
         // LSUIElement app は自動で前面にならず、承認シートが背後に埋もれるため明示 activate
         NSApp.activate()
     }
