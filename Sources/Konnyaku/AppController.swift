@@ -31,6 +31,12 @@ final class AppController {
         }
     }
 
+    var realtimeTranslationEnabled: Bool {
+        didSet {
+            ConfigStore.set(String(realtimeTranslationEnabled), forKey: ConfigStore.realtimeTranslationKey)
+        }
+    }
+
     init() {
         // 手編集用の実体を初回起動時から用意する (メニュー変更を待たない)
         try? ConfigStore.ensureFileExists()
@@ -41,6 +47,7 @@ final class AppController {
         correctionEnabled = config[ConfigStore.correctionKey] == "true"
         // 未設定 (初回) は速度優先を default にする (明示的な false のみ無効化)
         preferLowLatencyTranslation = config[ConfigStore.lowLatencyKey] != "false"
+        realtimeTranslationEnabled = config[ConfigStore.realtimeTranslationKey] != "false"
     }
 
     func loadLanguages() async {
@@ -54,6 +61,11 @@ final class AppController {
 
     func setPreferLowLatencyTranslation(_ enabled: Bool) {
         preferLowLatencyTranslation = enabled
+        scheduleLanguageRestart()
+    }
+
+    func setRealtimeTranslationEnabled(_ enabled: Bool) {
+        realtimeTranslationEnabled = enabled
         scheduleLanguageRestart()
     }
 
@@ -201,6 +213,7 @@ final class AppController {
                 outputLanguage: outputLanguage,
                 translationEnabled: translationEnabled,
                 useLowLatencyTranslation: useLowLatencyTranslation,
+                volatileTranslationEnabled: realtimeTranslationEnabled,
                 correctionEnabled: correctionEnabled,
                 contextualTerms: VocabularyStore.load()
             )

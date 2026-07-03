@@ -34,6 +34,7 @@ final class CaptionPipeline {
         outputLanguage: Locale.Language,
         translationEnabled: Bool,
         useLowLatencyTranslation: Bool,
+        volatileTranslationEnabled: Bool,
         correctionEnabled: Bool,
         contextualTerms: [String]
     ) async throws {
@@ -59,11 +60,14 @@ final class CaptionPipeline {
                 outputLanguage: outputLanguage,
                 lowLatency: useLowLatencyTranslation
             )
-            startVolatileTranslationWorker(
-                inputLanguage: inputLocale.language,
-                outputLanguage: outputLanguage,
-                lowLatency: useLowLatencyTranslation
-            )
+            // worker を起動しなければ pendingVolatileText が nil のまま yield が no-op になる
+            if volatileTranslationEnabled {
+                startVolatileTranslationWorker(
+                    inputLanguage: inputLocale.language,
+                    outputLanguage: outputLanguage,
+                    lowLatency: useLowLatencyTranslation
+                )
+            }
         }
         // 補正プロンプトの few-shot・フィラー語彙・語尾復元は日本語専用のため、
         // 他言語入力では worker を起動せず誤った書き換えを避ける
