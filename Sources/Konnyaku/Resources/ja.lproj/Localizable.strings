@@ -24,10 +24,6 @@
 "strategy.low_latency" = "速度優先 (lowLatency)";
 "strategy.high_fidelity" = "品質優先 (highFidelity)";
 
-"font.small" = "小";
-"font.regular" = "標準";
-"font.large" = "大";
-
 "status.mic_denied" = "マイクへのアクセスが許可されていません (システム設定 > プライバシーとセキュリティ)";
 "status.model_downloading" = "翻訳モデルをダウンロード中… (完了すると自動で開始します)";
 "status.model_download_elapsed" = "経過時間: %@";

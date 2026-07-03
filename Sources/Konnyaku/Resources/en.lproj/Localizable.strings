@@ -24,10 +24,6 @@
 "strategy.low_latency" = "Speed First (Low Latency)";
 "strategy.high_fidelity" = "Quality First (High Fidelity)";
 
-"font.small" = "Small";
-"font.regular" = "Regular";
-"font.large" = "Large";
-
 "status.mic_denied" = "Microphone access is not allowed (System Settings > Privacy & Security)";
 "status.model_downloading" = "Downloading the translation model… (subtitles start automatically when done)";
 "status.model_download_elapsed" = "Elapsed: %@";
