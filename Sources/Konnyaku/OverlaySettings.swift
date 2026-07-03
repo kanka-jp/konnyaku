@@ -20,7 +20,7 @@ final class OverlaySettings {
     }
 
     private var fontScaleIndex: Int {
-        Self.fontScales.firstIndex(of: fontScale) ?? Self.fontScales.firstIndex(of: 1.0)!
+        Self.fontScales.firstIndex(of: fontScale) ?? Self.fontScales.firstIndex(of: 1.0) ?? 0
     }
 
     var canDecreaseFontScale: Bool {

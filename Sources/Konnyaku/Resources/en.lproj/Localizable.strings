@@ -17,6 +17,8 @@
 "settings.realtime_translation" = "Real-Time Translation While Speaking";
 "settings.realtime_translation.help" = "When off, translation waits for each sentence to be finalized";
 "settings.font_size" = "Text Size";
+"settings.font_size.decrease" = "Decrease text size";
+"settings.font_size.increase" = "Increase text size";
 "settings.correction" = "Refine Transcription with AI";
 "settings.edit_vocabulary" = "Edit Custom Vocabulary…";
 "settings.auto_start" = "Start Subtitles Automatically at Launch";

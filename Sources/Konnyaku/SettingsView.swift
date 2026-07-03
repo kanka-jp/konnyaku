@@ -61,8 +61,9 @@ struct SettingsView: View {
                         Image(systemName: "minus")
                     }
                     .disabled(!controller.settings.canDecreaseFontScale)
+                    .accessibilityLabel(t("settings.font_size.decrease"))
 
-                    Text("\(Int(controller.settings.fontScale * 100))%")
+                    Text("\(Int((controller.settings.fontScale * 100).rounded()))%")
                         .monospacedDigit()
                         .frame(minWidth: 44)
 
@@ -72,6 +73,7 @@ struct SettingsView: View {
                         Image(systemName: "plus")
                     }
                     .disabled(!controller.settings.canIncreaseFontScale)
+                    .accessibilityLabel(t("settings.font_size.increase"))
                 }
                 .buttonStyle(.bordered)
             }
