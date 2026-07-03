@@ -80,6 +80,33 @@ struct CorrectionEngineTests {
                 "こんにちは。", raw: "こんにちは", history: []))
     }
 
+    // 捏造長文 (9 文字入力 → 379 文字出力の実害) が字幕に採用される regression 防止。
+    // echo 検出は履歴との完全一致のみで新規捏造を素通しするため、長さ比ガードが唯一の防壁
+    @Test func detectsImplausiblyLongOutputAsFabrication() {
+        let raw = String(repeating: "あ", count: 9)
+        #expect(
+            CorrectionEngine.isImplausiblyLong(
+                String(repeating: "い", count: 379), comparedTo: raw))
+        // 実測 2 件目 (24 文字 → 61 文字) も閾値 (2x + 12 = 60) でブロックされる
+        #expect(
+            CorrectionEngine.isImplausiblyLong(
+                String(repeating: "い", count: 61),
+                comparedTo: String(repeating: "あ", count: 24)))
+    }
+
+    @Test func allowsLegitimateCorrectionExpansion() {
+        // 句読点付与程度の伸長は正当な補正として通す
+        #expect(
+            !CorrectionEngine.isImplausiblyLong(
+                "昨日の会議で決まった内容を共有します。", comparedTo: "機能の会議で決まった内容を共有します"))
+        // ごく短い入力への句読点付与は定数項で許容される
+        #expect(!CorrectionEngine.isImplausiblyLong("はい、そうです。", comparedTo: "はい"))
+        // 同長・短縮 (filler 除去) は常に通す
+        #expect(
+            !CorrectionEngine.isImplausiblyLong(
+                "内容を共有します。", comparedTo: "えっと、内容を、あの、共有します"))
+    }
+
     // 直近 1 件だけでなく古い履歴の echo も検出する (session 履歴は全交換を保持するため)
     @Test func detectsEchoFromOlderHistoryEntries() {
         let history = [
