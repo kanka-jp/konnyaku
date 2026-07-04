@@ -8,6 +8,13 @@ final class OverlayController: NSObject, NSWindowDelegate {
 
     private var panel: NSPanel?
 
+    // 最大 8 行 (上下段とも確定 3 行 + 話し中/追従 1 行) 分の基準高さを fontScale に比例させ、
+    // 文字サイズ拡大時の字幕欠け (下寄せのため溢れると上端の古い行から欠ける) を軽減する
+    nonisolated static func panelHeight(fontScale: Double, availableHeight: CGFloat, margin: CGFloat) -> CGFloat {
+        let baseHeight: CGFloat = 300
+        return min(baseHeight * fontScale, availableHeight - margin * 2)
+    }
+
     func show(state: CaptionState, settings: OverlaySettings) {
         if let panel {
             panel.orderFrontRegardless()
@@ -15,9 +22,11 @@ final class OverlayController: NSObject, NSWindowDelegate {
         }
         guard let screen = NSScreen.main else { return }
         let margin: CGFloat = 24
-        // 複数行字幕 (上下段とも確定 3 行 + 話し中/追従 1 行 = 最大 8 行) 分。
-        // 内容は下寄せのため、折り返しで溢れた場合は古い行側 (上端) から画面外に欠ける
-        let height: CGFloat = 380
+        let height = Self.panelHeight(
+            fontScale: settings.fontScale,
+            availableHeight: screen.visibleFrame.height,
+            margin: margin
+        )
         var frame = NSRect(
             x: screen.visibleFrame.minX + margin,
             y: screen.visibleFrame.minY + margin,
