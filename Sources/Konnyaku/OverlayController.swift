@@ -26,8 +26,8 @@ final class OverlayController: NSObject, NSWindowDelegate {
         return screenFrames.first(where: { $0.contains(savedOrigin) }) ?? mainScreenFrame
     }
 
-    // origin の contains で決めた画面と、実際に frame が重なる画面 (intersects) は
-    // 一致しないことがある (secondary の外にわずかに出た場合)。不一致時は後者でサイズ・クランプし直す
+    // origin の contains で決めた画面 (targetScreen) が候補 frame とまだ重なるなら維持し、
+    // 重ならない場合のみ実際に重なる画面を探し直す (配列順で無関係な画面へ誤って上書きしないため)
     nonisolated static func resolvedShowFrame(
         fontScale: Double,
         savedOrigin: NSPoint?,
