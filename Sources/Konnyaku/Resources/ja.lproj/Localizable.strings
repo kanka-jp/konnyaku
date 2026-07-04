@@ -1,7 +1,7 @@
 "menu.start" = "字幕を開始";
 "menu.stop" = "字幕を停止";
 "menu.cancel_download" = "ダウンロードを中止";
-"menu.move_overlay" = "オーバーレイを移動 (ドラッグ)";
+"menu.move_overlay" = "字幕の位置を調整 (ドラッグ)";
 "menu.open_language_settings" = "システム設定から手動でダウンロード… (確実・進捗表示あり)";
 "menu.settings" = "設定…";
 "menu.quit" = "Konnyaku を終了";
@@ -17,6 +17,11 @@
 "settings.realtime_translation" = "話し中のリアルタイム翻訳";
 "settings.realtime_translation.help" = "オフにすると文の確定を待ってから翻訳します";
 "settings.font_size" = "文字サイズ";
+"settings.overlay_position" = "字幕の位置";
+"settings.overlay_position.adjust" = "ドラッグで調整…";
+"settings.overlay_position.finish" = "調整を終了";
+"settings.overlay_position.reset" = "初期位置に戻す";
+"settings.overlay_position.help" = "調整中は字幕をドラッグで移動し、「完了」で固定します";
 "settings.font_size.decrease" = "文字を小さくする";
 "settings.font_size.increase" = "文字を大きくする";
 "settings.correction" = "AI で文字起こしを補正";
@@ -50,7 +55,10 @@
 "correction.unavailable.device" = "このデバイスは Apple Intelligence 非対応です";
 "correction.unavailable.not_ready" = "Apple Intelligence モデルの準備中です";
 
-"overlay.hint" = "ドラッグで移動 → メニューの「オーバーレイを移動」を OFF で固定";
+"overlay.hint" = "ドラッグで位置を調整";
+"overlay.done" = "完了";
+"overlay.preview_source" = "ここに認識した音声が表示されます";
+"overlay.preview_translation" = "ここに翻訳が表示されます";
 
 "error.speech_unsupported" = "選択中の言語の音声認識は利用できません";
 "error.audio_format" = "音声認識に適合するオーディオフォーマットを取得できませんでした";

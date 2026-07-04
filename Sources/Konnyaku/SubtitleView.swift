@@ -5,24 +5,25 @@ struct SubtitleView: View {
 
     let state: CaptionState
     let settings: OverlaySettings
+    var onFinishMoving: () -> Void = {}
 
     var body: some View {
         VStack(spacing: 8) {
             Spacer(minLength: 0)
             if settings.isMovable {
-                movingHint
+                movingControls
             }
-            if !state.sourceDisplayLines.isEmpty {
+            if !sourceLines.isEmpty {
                 subtitleBlock(
-                    state.sourceDisplayLines,
+                    sourceLines,
                     size: 22 * settings.fontScale,
                     weight: .semibold,
                     color: .white.opacity(0.85)
                 )
             }
-            if !state.translationDisplayLines.isEmpty {
+            if !translationLines.isEmpty {
                 subtitleBlock(
-                    state.translationDisplayLines,
+                    translationLines,
                     size: 30 * settings.fontScale,
                     weight: .bold,
                     color: .white
@@ -38,13 +39,37 @@ struct SubtitleView: View {
         }
     }
 
-    private var movingHint: some View {
-        Text(t("overlay.hint"))
-            .font(.system(size: 14, weight: .medium))
-            .foregroundStyle(.orange)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(.black.opacity(0.75), in: Capsule())
+    // 位置調整中に字幕が流れていないと枠線だけで実際の見え方が分からないため
+    private var showsPreview: Bool {
+        settings.isMovable && state.sourceDisplayLines.isEmpty && state.translationDisplayLines.isEmpty
+    }
+
+    private var sourceLines: [CaptionState.DisplayLine] {
+        showsPreview
+            ? [CaptionState.DisplayLine(id: 0, text: t("overlay.preview_source"), kind: .final)]
+            : state.sourceDisplayLines
+    }
+
+    private var translationLines: [CaptionState.DisplayLine] {
+        showsPreview
+            ? [CaptionState.DisplayLine(id: 0, text: t("overlay.preview_translation"), kind: .final)]
+            : state.translationDisplayLines
+    }
+
+    private var movingControls: some View {
+        HStack(spacing: 10) {
+            Text(t("overlay.hint"))
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(.orange)
+            Button(t("overlay.done")) {
+                onFinishMoving()
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(.black.opacity(0.75), in: Capsule())
     }
 
     private func subtitleBlock(_ lines: [CaptionState.DisplayLine], size: CGFloat, weight: Font.Weight, color: Color) -> some View {
