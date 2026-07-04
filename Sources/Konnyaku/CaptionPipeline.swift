@@ -124,13 +124,17 @@ final class CaptionPipeline {
                         let generation = self.state.volatileGeneration
                         self.state.appendFinalSource(text)
                         // 補正 worker がいる場合は補正後テキストが表示差し替えと翻訳を担う
-                        if let pendingCorrection = self.pendingCorrection {
+                        switch Self.resolveFinalTextRoute(
+                            hasPendingCorrection: self.pendingCorrection != nil,
+                            hasPendingCorrectionRestart: self.pendingCorrectionRestart != nil
+                        ) {
+                        case .correction:
                             self.correctionBacklog += 1
-                            pendingCorrection.yield((text, generation))
-                        } else if self.pendingCorrectionRestart != nil {
+                            self.pendingCorrection?.yield((text, generation))
+                        case .bufferForCorrectionRestart:
                             // 旧 worker の drain 完了 (新 worker 起動) まで無補正のまま流さず保留する
                             self.pendingFinalTextsAwaitingCorrectionRestart.append((text, generation))
-                        } else {
+                        case .direct:
                             self.pendingSourceText?.yield((text, generation))
                         }
                     } else {
@@ -169,6 +173,19 @@ final class CaptionPipeline {
         guard shouldRun else { return .stopAndClearPending }
         guard !hasPendingCorrection else { return .noop }
         return hasActiveCorrectionTask ? .deferRestart : .startNow
+    }
+
+    enum FinalTextRoute: Equatable {
+        case correction
+        case bufferForCorrectionRestart
+        case direct
+    }
+
+    nonisolated static func resolveFinalTextRoute(
+        hasPendingCorrection: Bool, hasPendingCorrectionRestart: Bool
+    ) -> FinalTextRoute {
+        guard !hasPendingCorrection else { return .correction }
+        return hasPendingCorrectionRestart ? .bufferForCorrectionRestart : .direct
     }
 
     // 稼働中に補正 ON/OFF を切り替える。パイプライン全体を再起動せず補正 worker だけ
