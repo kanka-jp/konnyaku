@@ -9,6 +9,8 @@ final class OverlayController: NSObject, NSWindowDelegate {
     private static let margin: CGFloat = 24
 
     private var panel: NSPanel?
+    private var controlsPanel: NSPanel?
+    private var onFinishMoving: (() -> Void)?
 
     // 最大 8 行 (上下段とも確定 3 行 + 話し中/追従 1 行) 分の基準高さを fontScale に比例させ
     // (等倍では旧固定値 380pt と一致)、拡大時の字幕欠け (下寄せのため上端から欠ける) を軽減する
@@ -71,6 +73,7 @@ final class OverlayController: NSObject, NSWindowDelegate {
         languages: LanguageSettings,
         onFinishMoving: @escaping () -> Void
     ) {
+        self.onFinishMoving = onFinishMoving
         if let panel {
             panel.orderFrontRegardless()
             return
@@ -98,8 +101,7 @@ final class OverlayController: NSObject, NSWindowDelegate {
         panel.isReleasedWhenClosed = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.contentView = NSHostingView(
-            rootView: SubtitleView(
-                state: state, settings: settings, languages: languages, onFinishMoving: onFinishMoving))
+            rootView: SubtitleView(state: state, settings: settings, languages: languages))
         panel.delegate = self
         panel.orderFrontRegardless()
         self.panel = panel
@@ -108,6 +110,43 @@ final class OverlayController: NSObject, NSWindowDelegate {
     func hide() {
         panel?.orderOut(nil)
         panel = nil
+        hideControlsPanel()
+    }
+
+    // 調整用の操作 UI (ヒント + 完了) は字幕パネルと別の固定パネルに出す。字幕パネル内に
+    // 置くとドラッグ面とボタンが重なり、ボタンの位置に字幕を置けない / 掴めないため
+    private func showControlsPanel() {
+        guard controlsPanel == nil else { return }
+        let hosting = NSHostingView(rootView: MovingControlsView { [weak self] in
+            self?.onFinishMoving?()
+        })
+        let size = hosting.fittingSize
+        let screen = (panel?.screen ?? NSScreen.main)?.visibleFrame ?? .zero
+        let origin = NSPoint(
+            x: screen.midX - size.width / 2,
+            y: screen.maxY - size.height - Self.margin
+        )
+        let controls = NSPanel(
+            contentRect: NSRect(origin: origin, size: size),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        controls.isOpaque = false
+        controls.backgroundColor = .clear
+        controls.hasShadow = false
+        controls.level = .statusBar
+        controls.hidesOnDeactivate = false
+        controls.isReleasedWhenClosed = false
+        controls.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        controls.contentView = hosting
+        controls.orderFrontRegardless()
+        controlsPanel = controls
+    }
+
+    private func hideControlsPanel() {
+        controlsPanel?.orderOut(nil)
+        controlsPanel = nil
     }
 
     // setFrame が発火させる windowDidMove の再保存を defer の削除で打ち消し、
@@ -167,6 +206,11 @@ final class OverlayController: NSObject, NSWindowDelegate {
     func setMovable(_ movable: Bool) {
         panel?.ignoresMouseEvents = !movable
         panel?.isMovableByWindowBackground = movable
+        if movable {
+            showControlsPanel()
+        } else {
+            hideControlsPanel()
+        }
     }
 
     func windowDidMove(_ notification: Notification) {
