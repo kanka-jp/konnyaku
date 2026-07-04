@@ -10,12 +10,12 @@ final class OverlayController: NSObject, NSWindowDelegate {
 
     private var panel: NSPanel?
 
-    // 最大 8 行 (上下段とも確定 3 行 + 話し中/追従 1 行) 分の基準高さを fontScale に比例させ、
-    // 文字サイズ拡大時の字幕欠け (下寄せのため溢れると上端の古い行から欠ける) を軽減する
+    // 最大 8 行 (上下段とも確定 3 行 + 話し中/追従 1 行) 分の基準高さを fontScale に比例させ
+    // (等倍では旧固定値 380pt と一致)、拡大時の字幕欠け (下寄せのため上端から欠ける) を軽減する
     nonisolated static func panelHeight(fontScale: Double, availableHeight: CGFloat, margin: CGFloat) -> CGFloat {
-        let baseHeight: CGFloat = 300
+        let baseHeight: CGFloat = 380
         // padding/spacing は fontScale で縮まないため、縮小時も最低限の行数を収める下限を設ける
-        let minimumHeight: CGFloat = 380
+        let minimumHeight: CGFloat = 200
         return min(max(minimumHeight, baseHeight * fontScale), availableHeight - margin * 2)
     }
 
@@ -64,16 +64,28 @@ final class OverlayController: NSObject, NSWindowDelegate {
         panel = nil
     }
 
-    // NSRect は左下原点で SubtitleView は下寄せのため、origin はそのままに高さだけ
-    // 更新すると字幕の画面上の位置を保ったまま表示領域が上方向に伸縮する
+    // origin が画面外にはみ出さない範囲にクランプする (はみ出す分だけ最小限ずらす。
+    // reject-or-keep ではないため、わずかな水平ドラッグ位置も維持できる)
+    nonisolated static func clampedOrigin(origin: NSPoint, size: NSSize, screenFrame: NSRect) -> NSPoint {
+        let maxX = max(screenFrame.minX, screenFrame.maxX - size.width)
+        let maxY = max(screenFrame.minY, screenFrame.maxY - size.height)
+        return NSPoint(
+            x: min(max(origin.x, screenFrame.minX), maxX),
+            y: min(max(origin.y, screenFrame.minY), maxY)
+        )
+    }
+
+    // origin を固定したまま高さだけ伸ばすと fontScale 拡大時にパネル上端が画面外へ
+    // 出うるため、clampedOrigin で screenFrame 内に収める
     nonisolated static func resizedFrame(
         current: NSRect,
         fontScale: Double,
-        availableHeight: CGFloat,
+        screenFrame: NSRect,
         margin: CGFloat
     ) -> NSRect {
         var frame = current
-        frame.size.height = panelHeight(fontScale: fontScale, availableHeight: availableHeight, margin: margin)
+        frame.size.height = panelHeight(fontScale: fontScale, availableHeight: screenFrame.height, margin: margin)
+        frame.origin = clampedOrigin(origin: frame.origin, size: frame.size, screenFrame: screenFrame)
         return frame
     }
 
@@ -82,7 +94,7 @@ final class OverlayController: NSObject, NSWindowDelegate {
         let frame = Self.resizedFrame(
             current: panel.frame,
             fontScale: fontScale,
-            availableHeight: screen.visibleFrame.height,
+            screenFrame: screen.visibleFrame,
             margin: Self.margin
         )
         panel.setFrame(frame, display: true)
@@ -99,13 +111,16 @@ final class OverlayController: NSObject, NSWindowDelegate {
         UserDefaults.standard.set(Double(panel.frame.origin.y), forKey: Self.originYKey)
     }
 
-    // fontScale 拡大でパネルが高くなり得るため、部分重複 (intersects) では画面外への
-    // はみ出しを防げない。いずれかのスクリーンに完全に収まるかで判定する
-    nonisolated static func fits(frame: NSRect, in screenFrames: [NSRect]) -> Bool {
-        screenFrames.contains { $0.contains(frame) }
+    // origin が属するスクリーンが見つかった場合のみ clampedOrigin で収めて復元する
+    // (見つからない = モニター構成変更で見えなくなった場合は既定位置にする)
+    nonisolated static func clampedRestoreOrigin(_ origin: NSPoint, size: NSSize, screenFrames: [NSRect]) -> NSPoint? {
+        guard let screenFrame = screenFrames.first(where: { $0.contains(origin) }) else {
+            return nil
+        }
+        return clampedOrigin(origin: origin, size: size, screenFrame: screenFrame)
     }
 
-    // 保存済み位置が現在のスクリーン構成に完全に収まる場合のみ復元する
+    // 保存済み位置が現在のスクリーン構成で見える場合のみ復元する
     private func restoredOrigin(size: NSSize) -> NSPoint? {
         let defaults = UserDefaults.standard
         guard defaults.object(forKey: Self.originXKey) != nil,
@@ -116,8 +131,6 @@ final class OverlayController: NSObject, NSWindowDelegate {
             x: defaults.double(forKey: Self.originXKey),
             y: defaults.double(forKey: Self.originYKey)
         )
-        let frame = NSRect(origin: origin, size: size)
-        let fits = Self.fits(frame: frame, in: NSScreen.screens.map(\.visibleFrame))
-        return fits ? origin : nil
+        return Self.clampedRestoreOrigin(origin, size: size, screenFrames: NSScreen.screens.map(\.visibleFrame))
     }
 }
