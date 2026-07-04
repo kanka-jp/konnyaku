@@ -196,7 +196,7 @@ final class AppController {
     }
 
     private func showOverlay() {
-        overlay.show(state: state, settings: settings) { [weak self] in
+        overlay.show(state: state, settings: settings, languages: languages) { [weak self] in
             self?.setOverlayMovable(false)
         }
     }

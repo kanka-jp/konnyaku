@@ -5,6 +5,7 @@ struct SubtitleView: View {
 
     let state: CaptionState
     let settings: OverlaySettings
+    let languages: LanguageSettings
     var onFinishMoving: () -> Void = {}
 
     var body: some View {
@@ -51,9 +52,11 @@ struct SubtitleView: View {
     }
 
     private var translationLines: [CaptionState.DisplayLine] {
-        showsPreview
-            ? [CaptionState.DisplayLine(id: 0, text: t("overlay.preview_translation"), kind: .final)]
-            : state.translationDisplayLines
+        guard showsPreview else { return state.translationDisplayLines }
+        // 翻訳無効 (入出力同一言語) だと実表示は source 1 段のみ。プレビューにだけ翻訳行を
+        // 出すと bottom-align で実際より高い位置に合わせてしまうため、実表示と段数を揃える
+        guard languages.isTranslationEnabled else { return [] }
+        return [CaptionState.DisplayLine(id: 0, text: t("overlay.preview_translation"), kind: .final)]
     }
 
     private var movingControls: some View {

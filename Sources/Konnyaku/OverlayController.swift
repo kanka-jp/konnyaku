@@ -65,7 +65,12 @@ final class OverlayController: NSObject, NSWindowDelegate {
         return frame
     }
 
-    func show(state: CaptionState, settings: OverlaySettings, onFinishMoving: @escaping () -> Void) {
+    func show(
+        state: CaptionState,
+        settings: OverlaySettings,
+        languages: LanguageSettings,
+        onFinishMoving: @escaping () -> Void
+    ) {
         if let panel {
             panel.orderFrontRegardless()
             return
@@ -93,7 +98,8 @@ final class OverlayController: NSObject, NSWindowDelegate {
         panel.isReleasedWhenClosed = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.contentView = NSHostingView(
-            rootView: SubtitleView(state: state, settings: settings, onFinishMoving: onFinishMoving))
+            rootView: SubtitleView(
+                state: state, settings: settings, languages: languages, onFinishMoving: onFinishMoving))
         panel.delegate = self
         panel.orderFrontRegardless()
         self.panel = panel
