@@ -405,6 +405,8 @@ final class CaptionPipeline {
                 // translate loop に入らず諦める
                 if TranslationError.notInstalled ~= error {
                     await MainActor.run {
+                        // cancel 後に新しい translationTask が起動済みの場合、状態上書きを防ぐ
+                        guard !Task.isCancelled else { return }
                         state.setStatusMessage(t("status.translation_model_not_installed"))
                         // translationTask を残すと updateVolatileTranslationEnabled が
                         // 「確定訳 worker 稼働中」と誤認し追従訳 worker を起動してしまう
