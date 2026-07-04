@@ -14,7 +14,9 @@ final class OverlayController: NSObject, NSWindowDelegate {
     // 文字サイズ拡大時の字幕欠け (下寄せのため溢れると上端の古い行から欠ける) を軽減する
     nonisolated static func panelHeight(fontScale: Double, availableHeight: CGFloat, margin: CGFloat) -> CGFloat {
         let baseHeight: CGFloat = 300
-        return min(baseHeight * fontScale, availableHeight - margin * 2)
+        // padding/spacing は fontScale で縮まないため、縮小時も最低限の行数を収める下限を設ける
+        let minimumHeight: CGFloat = 380
+        return min(max(minimumHeight, baseHeight * fontScale), availableHeight - margin * 2)
     }
 
     func show(state: CaptionState, settings: OverlaySettings) {

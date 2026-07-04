@@ -5,11 +5,18 @@ import Testing
 
 struct OverlayControllerTests {
     @Test
-    func panelHeightScalesWithFontScale() {
-        let base = OverlayController.panelHeight(fontScale: 1.0, availableHeight: 1000, margin: 24)
-        let doubled = OverlayController.panelHeight(fontScale: 2.0, availableHeight: 1000, margin: 24)
+    func panelHeightScalesWithFontScaleAboveMinimumFloor() {
+        let base = OverlayController.panelHeight(fontScale: 1.5, availableHeight: 1000, margin: 24)
+        let doubled = OverlayController.panelHeight(fontScale: 3.0, availableHeight: 1000, margin: 24)
         let expected = base * 2
         #expect(doubled == expected)
+    }
+
+    @Test
+    func panelHeightAppliesMinimumFloorAtSmallFontScale() {
+        let height = OverlayController.panelHeight(fontScale: 0.5, availableHeight: 1000, margin: 24)
+        let expected: CGFloat = 380
+        #expect(height == expected)
     }
 
     @Test
