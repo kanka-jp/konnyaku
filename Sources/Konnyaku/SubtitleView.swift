@@ -6,14 +6,10 @@ struct SubtitleView: View {
     let state: CaptionState
     let settings: OverlaySettings
     let languages: LanguageSettings
-    var onFinishMoving: () -> Void = {}
 
     var body: some View {
         VStack(spacing: 8) {
             Spacer(minLength: 0)
-            if settings.isMovable {
-                movingControls
-            }
             if !sourceLines.isEmpty {
                 subtitleBlock(
                     sourceLines,
@@ -57,22 +53,6 @@ struct SubtitleView: View {
         // 出すと bottom-align で実際より高い位置に合わせてしまうため、実表示と段数を揃える
         guard languages.isTranslationEnabled else { return [] }
         return [CaptionState.DisplayLine(id: 0, text: t("overlay.preview_translation"), kind: .final)]
-    }
-
-    private var movingControls: some View {
-        HStack(spacing: 10) {
-            Text(t("overlay.hint"))
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(.orange)
-            Button(t("overlay.done")) {
-                onFinishMoving()
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.small)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .background(.black.opacity(0.75), in: Capsule())
     }
 
     private func subtitleBlock(_ lines: [CaptionState.DisplayLine], size: CGFloat, weight: Font.Weight, color: Color) -> some View {
