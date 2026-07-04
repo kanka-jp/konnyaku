@@ -368,7 +368,7 @@ final class CaptionPipeline {
         // TranslationSession は non-Sendable のため、detached task 内でローカル所有して
         // actor 境界を越える sending を発生させない
         let state = self.state
-        translationTask = Task.detached {
+        translationTask = Task.detached { [weak self] in
             debugLog("translation strategy: \(lowLatency ? "lowLatency" : "highFidelity")")
             let session = TranslationSupport.makeSession(
                 source: resolvedSource, target: resolvedTarget, lowLatency: lowLatency)
@@ -384,6 +384,11 @@ final class CaptionPipeline {
                 if TranslationError.notInstalled ~= error {
                     await MainActor.run {
                         state.setStatusMessage(t("status.translation_model_not_installed"))
+                        // translationTask を残すと updateVolatileTranslationEnabled が
+                        // 「確定訳 worker 稼働中」と誤認し追従訳 worker を起動してしまう
+                        self?.translationTask = nil
+                        self?.pendingSourceText?.finish()
+                        self?.pendingSourceText = nil
                     }
                     return
                 }

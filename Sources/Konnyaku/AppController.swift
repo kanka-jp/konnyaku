@@ -41,6 +41,9 @@ final class AppController {
     // 繰り越し再起動が DL 待機状態の再計画 (start やり直し) まで行うか。DL 要否に
     // 影響しない設定は false で予約し、進行中 DL を捨てない
     private var pendingRestartReplansDownload = false
+    // scheduleLanguageRestart がキューした再起動 Task。進行中は worker 差し替えを抑止し、
+    // 再起動完了前の言語ペア食い違い (旧言語ペアの確定訳 + 新言語ペアの追従訳) を防ぐ
+    private var languageRestartTask: Task<Void, Never>?
 
     var correctionEnabled: Bool {
         didSet {
@@ -99,7 +102,9 @@ final class AppController {
     // 再実行の防止)。非稼働中・start/stop 進行中 (isBusy) は値の保存のみ
     func setCorrectionEnabled(_ enabled: Bool) {
         correctionEnabled = enabled
-        guard state.isRunning, !isBusy, let pipeline else { return }
+        // languageRestartTask 進行中 (言語/strategy 変更の再起動待ち) は worker を差し替えず、
+        // 再起動完了後の syncPipelineTogglesWithCurrentSettings に反映を委ねる
+        guard state.isRunning, !isBusy, languageRestartTask == nil, let pipeline else { return }
         pipeline.updateCorrectionEnabled(
             enabled, inputLocale: languages.inputLocale, vocabulary: VocabularyStore.load())
     }
@@ -118,7 +123,9 @@ final class AppController {
     // 値の保存のみで、次回 start() が読む。start/stop 進行中 (isBusy) は何もしない
     func setRealtimeTranslationEnabled(_ enabled: Bool) {
         realtimeTranslationEnabled = enabled
-        guard state.isRunning, !isBusy, let pipeline else { return }
+        // 言語ペア変更の再起動待ち中は差し替えない (稼働中の確定訳 worker と異なる
+        // 言語ペアで追従訳 worker が起動する食い違いを防ぐ)
+        guard state.isRunning, !isBusy, languageRestartTask == nil, let pipeline else { return }
         pipeline.updateVolatileTranslationEnabled(
             enabled,
             inputLanguage: languages.inputLocale.language,
@@ -500,8 +507,9 @@ final class AppController {
         }
         // 停止処理中の変更は次回 start が最新の言語設定を読むため何もしない
         guard !isBusy else { return }
-        Task {
-            await restartIfRunning(replanDownload: replanDownload)
+        languageRestartTask = Task { [weak self] in
+            await self?.restartIfRunning(replanDownload: replanDownload)
+            self?.languageRestartTask = nil
         }
     }
 
@@ -513,8 +521,9 @@ final class AppController {
         pendingLanguageRestart = false
         let replanDownload = pendingRestartReplansDownload
         pendingRestartReplansDownload = false
-        Task {
-            await restartIfRunning(replanDownload: replanDownload)
+        languageRestartTask = Task { [weak self] in
+            await self?.restartIfRunning(replanDownload: replanDownload)
+            self?.languageRestartTask = nil
         }
     }
 
