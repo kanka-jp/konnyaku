@@ -6,27 +6,78 @@ final class OverlayController: NSObject, NSWindowDelegate {
     static let originXKey = "overlay.originX"
     static let originYKey = "overlay.originY"
 
+    private static let margin: CGFloat = 24
+
     private var panel: NSPanel?
+
+    // 最大 8 行 (上下段とも確定 3 行 + 話し中/追従 1 行) 分の基準高さを fontScale に比例させ
+    // (等倍では旧固定値 380pt と一致)、拡大時の字幕欠け (下寄せのため上端から欠ける) を軽減する
+    nonisolated static func panelHeight(fontScale: Double, availableHeight: CGFloat, margin: CGFloat) -> CGFloat {
+        let baseHeight: CGFloat = 380
+        // padding/spacing は fontScale で縮まないため、縮小時も最低限の行数を収める下限を設ける
+        let minimumHeight: CGFloat = 200
+        return min(max(minimumHeight, baseHeight * fontScale), availableHeight - margin * 2)
+    }
+
+    // 保存済み origin が属するスクリーンがあればその frame を使う (main 基準のままだと
+    // より小さいセカンダリモニターへ復元する際に height がそのスクリーンに収まらない)
+    nonisolated static func targetScreenFrame(savedOrigin: NSPoint?, screenFrames: [NSRect], mainScreenFrame: NSRect) -> NSRect {
+        guard let savedOrigin else { return mainScreenFrame }
+        return screenFrames.first(where: { $0.contains(savedOrigin) }) ?? mainScreenFrame
+    }
+
+    // origin の contains で決めた画面 (targetScreen) が候補 frame とまだ重なるなら維持し、
+    // 重ならない場合のみ実際に重なる画面を探し直す (配列順で無関係な画面へ誤って上書きしないため)
+    nonisolated static func resolvedShowFrame(
+        fontScale: Double,
+        savedOrigin: NSPoint?,
+        screenFrames: [NSRect],
+        mainScreenFrame: NSRect,
+        margin: CGFloat
+    ) -> NSRect {
+        func defaultFrame(on screen: NSRect) -> NSRect {
+            let height = panelHeight(fontScale: fontScale, availableHeight: screen.height, margin: margin)
+            return NSRect(
+                x: screen.minX + margin,
+                y: screen.minY + margin,
+                width: screen.width - margin * 2,
+                height: height
+            )
+        }
+
+        var targetScreen = targetScreenFrame(
+            savedOrigin: savedOrigin, screenFrames: screenFrames, mainScreenFrame: mainScreenFrame
+        )
+        var frame = defaultFrame(on: targetScreen)
+
+        guard let savedOrigin else { return frame }
+        let candidate = NSRect(origin: savedOrigin, size: frame.size)
+        // targetScreen 自体が既に重なっているなら維持する (他のスクリーンも重なる場合に
+        // 配列順で無関係な画面へ上書きしてしまうのを防ぐ)。重ならない場合のみ探し直す
+        if !targetScreen.intersects(candidate) {
+            guard let actualScreen = screenFrames.first(where: { $0.intersects(candidate) }) else {
+                return frame
+            }
+            targetScreen = actualScreen
+            frame = defaultFrame(on: targetScreen)
+        }
+        frame.origin = clampedOrigin(origin: savedOrigin, size: frame.size, screenFrame: targetScreen)
+        return frame
+    }
 
     func show(state: CaptionState, settings: OverlaySettings) {
         if let panel {
             panel.orderFrontRegardless()
             return
         }
-        guard let screen = NSScreen.main else { return }
-        let margin: CGFloat = 24
-        // 複数行字幕 (上下段とも確定 3 行 + 話し中/追従 1 行 = 最大 8 行) 分。
-        // 内容は下寄せのため、折り返しで溢れた場合は古い行側 (上端) から画面外に欠ける
-        let height: CGFloat = 380
-        var frame = NSRect(
-            x: screen.visibleFrame.minX + margin,
-            y: screen.visibleFrame.minY + margin,
-            width: screen.visibleFrame.width - margin * 2,
-            height: height
+        guard let mainScreen = NSScreen.main else { return }
+        let frame = Self.resolvedShowFrame(
+            fontScale: settings.fontScale,
+            savedOrigin: savedOrigin(),
+            screenFrames: NSScreen.screens.map(\.visibleFrame),
+            mainScreenFrame: mainScreen.visibleFrame,
+            margin: Self.margin
         )
-        if let restored = restoredOrigin(size: frame.size) {
-            frame.origin = restored
-        }
         let panel = NSPanel(
             contentRect: frame,
             styleMask: [.borderless, .nonactivatingPanel],
@@ -52,6 +103,42 @@ final class OverlayController: NSObject, NSWindowDelegate {
         panel = nil
     }
 
+    // origin が画面外にはみ出さない範囲にクランプする (はみ出す分だけ最小限ずらす。
+    // reject-or-keep ではないため、わずかな水平ドラッグ位置も維持できる)
+    nonisolated static func clampedOrigin(origin: NSPoint, size: NSSize, screenFrame: NSRect) -> NSPoint {
+        let maxX = max(screenFrame.minX, screenFrame.maxX - size.width)
+        let maxY = max(screenFrame.minY, screenFrame.maxY - size.height)
+        return NSPoint(
+            x: min(max(origin.x, screenFrame.minX), maxX),
+            y: min(max(origin.y, screenFrame.minY), maxY)
+        )
+    }
+
+    // origin を固定したまま高さだけ伸ばすと fontScale 拡大時にパネル上端が画面外へ
+    // 出うるため、clampedOrigin で screenFrame 内に収める
+    nonisolated static func resizedFrame(
+        current: NSRect,
+        fontScale: Double,
+        screenFrame: NSRect,
+        margin: CGFloat
+    ) -> NSRect {
+        var frame = current
+        frame.size.height = panelHeight(fontScale: fontScale, availableHeight: screenFrame.height, margin: margin)
+        frame.origin = clampedOrigin(origin: frame.origin, size: frame.size, screenFrame: screenFrame)
+        return frame
+    }
+
+    func updateFontScale(_ fontScale: Double) {
+        guard let panel, let screen = panel.screen ?? NSScreen.main else { return }
+        let frame = Self.resizedFrame(
+            current: panel.frame,
+            fontScale: fontScale,
+            screenFrame: screen.visibleFrame,
+            margin: Self.margin
+        )
+        panel.setFrame(frame, display: true)
+    }
+
     func setMovable(_ movable: Bool) {
         panel?.ignoresMouseEvents = !movable
         panel?.isMovableByWindowBackground = movable
@@ -63,21 +150,15 @@ final class OverlayController: NSObject, NSWindowDelegate {
         UserDefaults.standard.set(Double(panel.frame.origin.y), forKey: Self.originYKey)
     }
 
-    // 保存済み位置が現在のスクリーン構成で見える場合のみ復元する
-    private func restoredOrigin(size: NSSize) -> NSPoint? {
+    private func savedOrigin() -> NSPoint? {
         let defaults = UserDefaults.standard
         guard defaults.object(forKey: Self.originXKey) != nil,
               defaults.object(forKey: Self.originYKey) != nil else {
             return nil
         }
-        let origin = NSPoint(
+        return NSPoint(
             x: defaults.double(forKey: Self.originXKey),
             y: defaults.double(forKey: Self.originYKey)
         )
-        let frame = NSRect(origin: origin, size: size)
-        let visible = NSScreen.screens.contains { screen in
-            screen.visibleFrame.intersects(frame)
-        }
-        return visible ? origin : nil
     }
 }

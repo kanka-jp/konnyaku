@@ -82,6 +82,21 @@ final class AppController {
         preferLowLatencyTranslation = config[ConfigStore.lowLatencyKey] != "false"
         realtimeTranslationEnabled = config[ConfigStore.realtimeTranslationKey] != "false"
         autoStartEnabled = config[ConfigStore.autoStartKey] != "false"
+        observeFontScaleChanges()
+    }
+
+    // fontScale の変更をオーバーレイ表示中も追従させる (withObservationTracking は
+    // 発火のたびに再登録が必要な one-shot 契約のため、再帰呼び出しで監視を継続する)
+    private func observeFontScaleChanges() {
+        withObservationTracking {
+            _ = settings.fontScale
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.overlay.updateFontScale(self.settings.fontScale)
+                self.observeFontScaleChanges()
+            }
+        }
     }
 
     // メニューバー label の .task (起動時に必ず一度現れる唯一の view) から呼ばれる。

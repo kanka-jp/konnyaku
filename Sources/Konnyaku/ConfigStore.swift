@@ -38,7 +38,7 @@ enum ConfigStore {
     # 出力言語 (翻訳先) の識別子
     output-language = en-US
 
-    # 字幕の文字サイズ: 0.7 〜 1.3 (0.1 刻み、既定 1.0)
+    # 字幕の文字サイズ: 0.5 〜 2.0 (0.1 刻み、既定 1.0)
     font-scale = 1.0
 
     # 低遅延翻訳 (lowLatency strategy、対応言語ペアのみ) を優先する: true / false
