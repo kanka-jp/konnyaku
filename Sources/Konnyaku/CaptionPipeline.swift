@@ -44,6 +44,7 @@ final class CaptionPipeline {
     nonisolated private static let sentenceBreakPunctuation: Set<Character> = [
         "、", "。", "，", "．", "！", "？", ",", ".", "!", "?",
     ]
+    private static let maxTranslationQueueDepth = 2
 
     func start(
         inputLocale: Locale,
@@ -188,6 +189,14 @@ final class CaptionPipeline {
         return hasDrainingCorrectionTask ? .bufferUntilDrainCompletes : .direct
     }
 
+    // bufferingNewest は consumer の drain 状況次第で生き残る要素が非決定的になるため、
+    // 直近 N 件へ明示的に切り詰めてから yield する
+    private func flushDirectlyToTranslation(_ items: [(text: String, generation: Int)]) {
+        for item in items.suffix(Self.maxTranslationQueueDepth) {
+            pendingSourceText?.yield(item)
+        }
+    }
+
     // 稼働中に補正 ON/OFF を切り替える。パイプライン全体を再起動せず補正 worker だけ
     // 起動・停止する (全体再起動は字幕が一瞬途切れ prepareTranslation も再実行されるため)
     func updateCorrectionEnabled(_ enabled: Bool, inputLocale: Locale, vocabulary: [String]) {
@@ -210,9 +219,7 @@ final class CaptionPipeline {
             pendingCorrection = nil
             // drain 中は完了コールバックが flush するため、drain 中でない場合のみここで flush する
             if correctionTask == nil {
-                for item in pendingFinalTextsAwaitingCorrectionDrain {
-                    pendingSourceText?.yield(item)
-                }
+                flushDirectlyToTranslation(pendingFinalTextsAwaitingCorrectionDrain)
                 pendingFinalTextsAwaitingCorrectionDrain.removeAll()
             }
         case .noop:
@@ -410,9 +417,7 @@ final class CaptionPipeline {
             } else {
                 // restart 予約なし (OFF 確定) の場合、保留文を旧 worker の補正結果より
                 // 先に流さないよう到着順のまま無補正で flush する
-                for item in buffered {
-                    self.pendingSourceText?.yield(item)
-                }
+                self.flushDirectlyToTranslation(buffered)
             }
         }
     }
@@ -423,11 +428,11 @@ final class CaptionPipeline {
         lowLatency: Bool
     ) {
         // ライブ字幕では滞留した古い文を訳す価値がないため、翻訳が追いつかない場合は
-        // 新しい文を優先して古い待ち行列を捨てる (実測データが無いため保守的に 2 件までに絞り、
+        // 新しい文を優先して古い待ち行列を捨てる (実測データが無いため保守的に絞り、
         // 最大遅延を短く抑える)
         let (sourceStream, sourceContinuation) = AsyncStream.makeStream(
             of: (text: String, generation: Int).self,
-            bufferingPolicy: .bufferingNewest(2)
+            bufferingPolicy: .bufferingNewest(Self.maxTranslationQueueDepth)
         )
         pendingSourceText = sourceContinuation
 
