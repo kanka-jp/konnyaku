@@ -41,9 +41,10 @@ final class AppController {
     // 繰り越し再起動が DL 待機状態の再計画 (start やり直し) まで行うか。DL 要否に
     // 影響しない設定は false で予約し、進行中 DL を捨てない
     private var pendingRestartReplansDownload = false
-    // scheduleLanguageRestart がキューした再起動 Task。進行中は worker 差し替えを抑止し、
-    // 再起動完了前の言語ペア食い違い (旧言語ペアの確定訳 + 新言語ペアの追従訳) を防ぐ
-    private var languageRestartTask: Task<Void, Never>?
+    // scheduleLanguageRestart がキューした再起動処理の進行中カウント。Task 自体でなく
+    // カウントで管理するのは、連続再起動時に先勝ちタスクの完了が後発タスクの保護区間を誤って解除するのを防ぐため
+    private var languageRestartInFlightCount = 0
+    private var isLanguageRestartInFlight: Bool { languageRestartInFlightCount > 0 }
 
     var correctionEnabled: Bool {
         didSet {
@@ -103,8 +104,8 @@ final class AppController {
     func setCorrectionEnabled(_ enabled: Bool) {
         correctionEnabled = enabled
         // languageRestartTask 進行中 (言語/strategy 変更の再起動待ち) は worker を差し替えず、
-        // 再起動完了後の syncPipelineTogglesWithCurrentSettings に反映を委ねる
-        guard state.isRunning, !isBusy, languageRestartTask == nil, let pipeline else { return }
+        // 完了後の再起動 (start() の sync または新設定での起動) に反映を委ねる
+        guard state.isRunning, !isBusy, !isLanguageRestartInFlight, let pipeline else { return }
         pipeline.updateCorrectionEnabled(
             enabled, inputLocale: languages.inputLocale, vocabulary: VocabularyStore.load())
     }
@@ -125,7 +126,7 @@ final class AppController {
         realtimeTranslationEnabled = enabled
         // 言語ペア変更の再起動待ち中は差し替えない (稼働中の確定訳 worker と異なる
         // 言語ペアで追従訳 worker が起動する食い違いを防ぐ)
-        guard state.isRunning, !isBusy, languageRestartTask == nil, let pipeline else { return }
+        guard state.isRunning, !isBusy, !isLanguageRestartInFlight, let pipeline else { return }
         pipeline.updateVolatileTranslationEnabled(
             enabled,
             inputLanguage: languages.inputLocale.language,
@@ -347,9 +348,11 @@ final class AppController {
         defer {
             isStarting = false
             isBusy = false
-            // start() 進行中のトグル変更は guard state.isRunning で無視されるため、
-            // start 完了後に現在値へ同期して取りこぼしを防ぐ (未変更なら worker 側で no-op)
-            syncPipelineTogglesWithCurrentSettings()
+            // pendingLanguageRestart 時は直後のフル再起動に任せ sync をスキップする
+            // (sync すると旧言語ペアの確定訳 worker と食い違う中間状態を作るため)
+            if !pendingLanguageRestart {
+                syncPipelineTogglesWithCurrentSettings()
+            }
             consumePendingLanguageRestart()
         }
         state.statusMessage = nil
@@ -507,9 +510,10 @@ final class AppController {
         }
         // 停止処理中の変更は次回 start が最新の言語設定を読むため何もしない
         guard !isBusy else { return }
-        languageRestartTask = Task { [weak self] in
+        languageRestartInFlightCount += 1
+        Task { [weak self] in
             await self?.restartIfRunning(replanDownload: replanDownload)
-            self?.languageRestartTask = nil
+            self?.languageRestartInFlightCount -= 1
         }
     }
 
@@ -521,9 +525,10 @@ final class AppController {
         pendingLanguageRestart = false
         let replanDownload = pendingRestartReplansDownload
         pendingRestartReplansDownload = false
-        languageRestartTask = Task { [weak self] in
+        languageRestartInFlightCount += 1
+        Task { [weak self] in
             await self?.restartIfRunning(replanDownload: replanDownload)
-            self?.languageRestartTask = nil
+            self?.languageRestartInFlightCount -= 1
         }
     }
 

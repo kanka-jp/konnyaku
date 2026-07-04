@@ -148,24 +148,45 @@ final class CaptionPipeline {
         state.isRunning = true
     }
 
+    enum CorrectionToggleAction: Equatable {
+        case startNow
+        case deferRestart
+        case stopAndClearPending
+        case noop
+    }
+
+    // OFF 要求は pendingCorrection の有無に関わらず常に .stopAndClearPending を返す
+    // (有無だけで判定すると OFF→ON→OFF 高速切替で保留中の再起動要求を取りこぼすため。純関数・テスト対象)
+    nonisolated static func resolveCorrectionToggleAction(
+        shouldRun: Bool, hasPendingCorrection: Bool, hasActiveCorrectionTask: Bool
+    ) -> CorrectionToggleAction {
+        guard shouldRun else { return .stopAndClearPending }
+        guard !hasPendingCorrection else { return .noop }
+        return hasActiveCorrectionTask ? .deferRestart : .startNow
+    }
+
     // 稼働中に補正 ON/OFF を切り替える。パイプライン全体を再起動せず補正 worker だけ
     // 起動・停止する (全体再起動は字幕が一瞬途切れ prepareTranslation も再実行されるため)
     func updateCorrectionEnabled(_ enabled: Bool, inputLocale: Locale, vocabulary: [String]) {
         let shouldRun = enabled && CorrectionEngine.isAvailable
             && inputLocale.language.languageCode == .japanese
-        guard shouldRun != (pendingCorrection != nil) else { return }
-        if shouldRun {
-            guard correctionTask == nil else {
-                pendingCorrectionRestart = (inputLocale, vocabulary)
-                return
-            }
+        switch Self.resolveCorrectionToggleAction(
+            shouldRun: shouldRun,
+            hasPendingCorrection: pendingCorrection != nil,
+            hasActiveCorrectionTask: correctionTask != nil
+        ) {
+        case .startNow:
             startCorrectionWorker(inputLocale: inputLocale, vocabulary: vocabulary)
-        } else {
+        case .deferRestart:
+            pendingCorrectionRestart = (inputLocale, vocabulary)
+        case .stopAndClearPending:
             // backlog を drain してから自然終了させる。hard cancel すると滞留中の文が
             // pendingSourceText に転送されず訳されないまま取り残される
             pendingCorrectionRestart = nil
             pendingCorrection?.finish()
             pendingCorrection = nil
+        case .noop:
+            break
         }
     }
 
@@ -389,6 +410,15 @@ final class CaptionPipeline {
                         self?.translationTask = nil
                         self?.pendingSourceText?.finish()
                         self?.pendingSourceText = nil
+                        // 追従訳 worker も明示的に止める。残すと上記ガードが effectively 死に、
+                        // OFF 操作で追従訳を止められなくなる
+                        self?.volatileTranslationStartTask?.cancel()
+                        self?.volatileTranslationStartTask = nil
+                        self?.pendingVolatileText?.finish()
+                        self?.pendingVolatileText = nil
+                        self?.volatileTranslationTask?.cancel()
+                        self?.volatileTranslationTask = nil
+                        state.setVolatileTranslation("", generation: state.volatileGeneration)
                     }
                     return
                 }

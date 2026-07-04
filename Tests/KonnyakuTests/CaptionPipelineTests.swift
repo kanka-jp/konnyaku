@@ -38,4 +38,37 @@ struct CaptionPipelineTests {
         let text = "です。" + String(repeating: "あ", count: 40)
         #expect(!CaptionPipeline.shouldForceFinalize(text: text, threshold: 40))
     }
+
+    // OFF→ON→OFF 高速切替再現: 2回目の OFF で pendingCorrection が既に nil でも保留中の
+    // 再起動要求は必ずクリアされる (regression: 旧実装は有無だけで判定し取りこぼしていた)
+    @Test
+    func resolveCorrectionToggleActionStopsAndClearsPendingRegardlessOfPendingCorrectionState() {
+        #expect(CaptionPipeline.resolveCorrectionToggleAction(
+            shouldRun: false, hasPendingCorrection: false, hasActiveCorrectionTask: true
+        ) == .stopAndClearPending)
+        #expect(CaptionPipeline.resolveCorrectionToggleAction(
+            shouldRun: false, hasPendingCorrection: true, hasActiveCorrectionTask: true
+        ) == .stopAndClearPending)
+    }
+
+    @Test
+    func resolveCorrectionToggleActionDefersRestartWhenTaskStillDraining() {
+        #expect(CaptionPipeline.resolveCorrectionToggleAction(
+            shouldRun: true, hasPendingCorrection: false, hasActiveCorrectionTask: true
+        ) == .deferRestart)
+    }
+
+    @Test
+    func resolveCorrectionToggleActionStartsImmediatelyWhenIdle() {
+        #expect(CaptionPipeline.resolveCorrectionToggleAction(
+            shouldRun: true, hasPendingCorrection: false, hasActiveCorrectionTask: false
+        ) == .startNow)
+    }
+
+    @Test
+    func resolveCorrectionToggleActionNoopsWhenAlreadyRunning() {
+        #expect(CaptionPipeline.resolveCorrectionToggleAction(
+            shouldRun: true, hasPendingCorrection: true, hasActiveCorrectionTask: false
+        ) == .noop)
+    }
 }
