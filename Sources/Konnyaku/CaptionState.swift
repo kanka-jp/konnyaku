@@ -95,9 +95,8 @@ final class CaptionState {
         volatileTranslationGeneration = -1
     }
 
-    // 対象行が既に流れた場合に無関係な行を上書きしない guard。同一テキストの重複行では
-    // 文字列一致だけだと補正の完了順序が入れ替わった際に誤った行を差し替えうるため、
-    // 確定時の generation で一意特定する (text 一致は念のための併用、addedAt は差し替え直後の失効防止)
+    // 文字列一致だけでは補正完了順序の入れ替わりで誤った行を差し替えるため generation で
+    // 一意特定する (text は既に流れた行を上書きしない guard、addedAt は差し替え直後の失効防止)
     func replaceFinalSource(_ old: String, with new: String, generation: Int, at now: Date = Date()) {
         guard let index = sourceLines.firstIndex(where: { $0.generation == generation && $0.text == old })
         else { return }

@@ -35,9 +35,8 @@ final class AppController {
     private var isStarting = false
     private var didAttemptAutoStart = false
     private var pendingLanguageRestart = false
-    // setCorrectionEnabled/setRealtimeTranslationEnabled が稼働中に worker だけ差し替える際、
-    // preferLowLatencyTranslation ではなく直近の start() が実際に解決した strategy を使う
-    // (plan() のフォールバックでプリファレンスと食い違うことがあるため)
+    // 稼働中の worker 差し替えは preferLowLatencyTranslation でなく直近 start() が解決した
+    // strategy を使う (plan() のフォールバックとの食い違い防止)
     private var activeUseLowLatencyTranslation = false
     // 繰り越し再起動が DL 待機状態の再計画 (start やり直し) まで行うか。DL 要否に
     // 影響しない設定は false で予約し、進行中 DL を捨てない
@@ -96,9 +95,8 @@ final class AppController {
         await languages.loadAvailable()
     }
 
-    // 稼働中はパイプライン全体を再起動せず補正 worker だけ差し替える (体感の途切れ・
-    // prepareTranslation の再実行を避ける)。非稼働中は値の保存のみで、次回 start() が読む。
-    // start/stop 進行中 (isBusy) は pipeline が生成・破棄の途中なので何もしない
+    // 稼働中は worker だけ差し替え全体再起動を避ける (体感の途切れ・prepareTranslation
+    // 再実行の防止)。非稼働中・start/stop 進行中 (isBusy) は値の保存のみ
     func setCorrectionEnabled(_ enabled: Bool) {
         correctionEnabled = enabled
         guard state.isRunning, !isBusy, let pipeline else { return }
