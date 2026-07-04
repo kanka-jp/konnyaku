@@ -51,12 +51,13 @@ final class OverlayController: NSObject, NSWindowDelegate {
         var frame = defaultFrame(on: targetScreen)
 
         guard let savedOrigin else { return frame }
-        guard let actualScreen = screenFrames.first(where: {
-            $0.intersects(NSRect(origin: savedOrigin, size: frame.size))
-        }) else {
-            return frame
-        }
-        if actualScreen != targetScreen {
+        let candidate = NSRect(origin: savedOrigin, size: frame.size)
+        // targetScreen 自体が既に重なっているなら維持する (他のスクリーンも重なる場合に
+        // 配列順で無関係な画面へ上書きしてしまうのを防ぐ)。重ならない場合のみ探し直す
+        if !targetScreen.intersects(candidate) {
+            guard let actualScreen = screenFrames.first(where: { $0.intersects(candidate) }) else {
+                return frame
+            }
             targetScreen = actualScreen
             frame = defaultFrame(on: targetScreen)
         }

@@ -161,6 +161,20 @@ struct OverlayControllerTests {
     }
 
     @Test
+    func resolvedShowFrameKeepsValidTargetScreenEvenWhenAnotherScreenAlsoIntersects() {
+        // saved origin は secondary にのみ contains されるが、拡大後の frame は main とも
+        // intersects しうる。screenFrames の先頭が main でも secondary を維持すべき
+        let secondary = NSRect(x: 0, y: 0, width: 1000, height: 800)
+        let main = NSRect(x: 0, y: 800, width: 1000, height: 1000)
+        let frame = OverlayController.resolvedShowFrame(
+            fontScale: 2.0, savedOrigin: NSPoint(x: 100, y: 50), screenFrames: [main, secondary],
+            mainScreenFrame: main, margin: 24
+        )
+        let expectedHeight = OverlayController.panelHeight(fontScale: 2.0, availableHeight: secondary.height, margin: 24)
+        #expect(frame.height == expectedHeight)
+    }
+
+    @Test
     func targetScreenFrameUsesMainScreenWhenNoSavedOrigin() {
         let main = NSRect(x: 0, y: 0, width: 1000, height: 800)
         let secondary = NSRect(x: 1000, y: 0, width: 600, height: 400)
