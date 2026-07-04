@@ -97,32 +97,67 @@ struct OverlayControllerTests {
     }
 
     @Test
-    func clampedRestoreOriginReturnsNilWhenOriginOutsideAllScreens() {
-        let screen = NSRect(x: 0, y: 0, width: 1000, height: 800)
-        let result = OverlayController.clampedRestoreOrigin(
-            NSPoint(x: 5000, y: 5000), size: NSSize(width: 952, height: 380), screenFrames: [screen]
+    func resolvedShowFrameUsesMainScreenDefaultWhenNoSavedOrigin() {
+        let main = NSRect(x: 0, y: 0, width: 1000, height: 800)
+        let frame = OverlayController.resolvedShowFrame(
+            fontScale: 1.0, savedOrigin: nil, screenFrames: [main], mainScreenFrame: main, margin: 24
         )
-        #expect(result == nil)
+        #expect(frame == NSRect(x: 24, y: 24, width: 952, height: 380))
     }
 
     @Test
-    func clampedRestoreOriginClampsLargeHorizontalDragInsteadOfRejecting() {
-        let screen = NSRect(x: 0, y: 0, width: 1000, height: 800)
-        let dragged = NSPoint(x: 100, y: 24)
-        let result = OverlayController.clampedRestoreOrigin(
-            dragged, size: NSSize(width: 952, height: 380), screenFrames: [screen]
+    func resolvedShowFrameFallsBackToMainDefaultWhenOriginAndFrameMatchNoScreen() {
+        let main = NSRect(x: 0, y: 0, width: 1000, height: 800)
+        let frame = OverlayController.resolvedShowFrame(
+            fontScale: 1.0, savedOrigin: NSPoint(x: 5000, y: 5000), screenFrames: [main], mainScreenFrame: main, margin: 24
         )
-        #expect(result == NSPoint(x: 48, y: 24))
+        #expect(frame.origin == NSPoint(x: 24, y: 24))
     }
 
     @Test
-    func clampedRestoreOriginClampsLeftwardDragInsteadOfRejecting() {
-        let screen = NSRect(x: 0, y: 0, width: 1000, height: 800)
-        let dragged = NSPoint(x: -10, y: 24)
-        let result = OverlayController.clampedRestoreOrigin(
-            dragged, size: NSSize(width: 952, height: 380), screenFrames: [screen]
+    func resolvedShowFrameClampsLargeHorizontalDragInsteadOfResettingToDefault() {
+        let main = NSRect(x: 0, y: 0, width: 1000, height: 800)
+        let frame = OverlayController.resolvedShowFrame(
+            fontScale: 1.0, savedOrigin: NSPoint(x: 100, y: 24), screenFrames: [main], mainScreenFrame: main, margin: 24
         )
-        #expect(result == NSPoint(x: 0, y: 24))
+        #expect(frame.origin == NSPoint(x: 48, y: 24))
+    }
+
+    @Test
+    func resolvedShowFrameClampsLeftwardDragInsteadOfResettingToDefault() {
+        let main = NSRect(x: 0, y: 0, width: 1000, height: 800)
+        let frame = OverlayController.resolvedShowFrame(
+            fontScale: 1.0, savedOrigin: NSPoint(x: -10, y: 24), screenFrames: [main], mainScreenFrame: main, margin: 24
+        )
+        #expect(frame.origin == NSPoint(x: 0, y: 24))
+    }
+
+    @Test
+    func resolvedShowFrameSizesForScreenContainingSavedOrigin() {
+        let main = NSRect(x: 0, y: 0, width: 1000, height: 800)
+        let secondary = NSRect(x: 1000, y: 0, width: 600, height: 400)
+        let frame = OverlayController.resolvedShowFrame(
+            fontScale: 2.0, savedOrigin: NSPoint(x: 1200, y: 100), screenFrames: [main, secondary],
+            mainScreenFrame: main, margin: 24
+        )
+        let expectedHeight = OverlayController.panelHeight(fontScale: 2.0, availableHeight: 400, margin: 24)
+        #expect(frame.height == expectedHeight)
+    }
+
+    @Test
+    func resolvedShowFrameReconcilesScreenMismatchBetweenOriginAndFrameIntersection() {
+        // origin 点はどの画面にも contains されないが、main 基準サイズの frame は
+        // secondary と intersects する (secondary の外にわずかにドラッグされたケース)
+        let main = NSRect(x: 0, y: 0, width: 1000, height: 800)
+        let secondary = NSRect(x: 1200, y: 0, width: 600, height: 1200)
+        let frame = OverlayController.resolvedShowFrame(
+            fontScale: 1.0, savedOrigin: NSPoint(x: 1050, y: 100), screenFrames: [main, secondary],
+            mainScreenFrame: main, margin: 24
+        )
+        let expectedHeight = OverlayController.panelHeight(fontScale: 1.0, availableHeight: 1200, margin: 24)
+        #expect(frame.height == expectedHeight)
+        #expect(frame.minX >= secondary.minX)
+        #expect(frame.maxX <= secondary.maxX)
     }
 
     @Test

@@ -26,31 +26,57 @@ final class OverlayController: NSObject, NSWindowDelegate {
         return screenFrames.first(where: { $0.contains(savedOrigin) }) ?? mainScreenFrame
     }
 
+    // origin の contains で決めた画面と、実際に frame が重なる画面 (intersects) は
+    // 一致しないことがある (secondary の外にわずかに出た場合)。不一致時は後者でサイズ・クランプし直す
+    nonisolated static func resolvedShowFrame(
+        fontScale: Double,
+        savedOrigin: NSPoint?,
+        screenFrames: [NSRect],
+        mainScreenFrame: NSRect,
+        margin: CGFloat
+    ) -> NSRect {
+        func defaultFrame(on screen: NSRect) -> NSRect {
+            let height = panelHeight(fontScale: fontScale, availableHeight: screen.height, margin: margin)
+            return NSRect(
+                x: screen.minX + margin,
+                y: screen.minY + margin,
+                width: screen.width - margin * 2,
+                height: height
+            )
+        }
+
+        var targetScreen = targetScreenFrame(
+            savedOrigin: savedOrigin, screenFrames: screenFrames, mainScreenFrame: mainScreenFrame
+        )
+        var frame = defaultFrame(on: targetScreen)
+
+        guard let savedOrigin else { return frame }
+        guard let actualScreen = screenFrames.first(where: {
+            $0.intersects(NSRect(origin: savedOrigin, size: frame.size))
+        }) else {
+            return frame
+        }
+        if actualScreen != targetScreen {
+            targetScreen = actualScreen
+            frame = defaultFrame(on: targetScreen)
+        }
+        frame.origin = clampedOrigin(origin: savedOrigin, size: frame.size, screenFrame: targetScreen)
+        return frame
+    }
+
     func show(state: CaptionState, settings: OverlaySettings) {
         if let panel {
             panel.orderFrontRegardless()
             return
         }
         guard let mainScreen = NSScreen.main else { return }
-        let screenFrames = NSScreen.screens.map(\.visibleFrame)
-        let saved = savedOrigin()
-        let targetScreen = Self.targetScreenFrame(
-            savedOrigin: saved, screenFrames: screenFrames, mainScreenFrame: mainScreen.visibleFrame
-        )
-        let height = Self.panelHeight(
+        let frame = Self.resolvedShowFrame(
             fontScale: settings.fontScale,
-            availableHeight: targetScreen.height,
+            savedOrigin: savedOrigin(),
+            screenFrames: NSScreen.screens.map(\.visibleFrame),
+            mainScreenFrame: mainScreen.visibleFrame,
             margin: Self.margin
         )
-        var frame = NSRect(
-            x: targetScreen.minX + Self.margin,
-            y: targetScreen.minY + Self.margin,
-            width: targetScreen.width - Self.margin * 2,
-            height: height
-        )
-        if let saved, let restored = Self.clampedRestoreOrigin(saved, size: frame.size, screenFrames: screenFrames) {
-            frame.origin = restored
-        }
         let panel = NSPanel(
             contentRect: frame,
             styleMask: [.borderless, .nonactivatingPanel],
@@ -121,16 +147,6 @@ final class OverlayController: NSObject, NSWindowDelegate {
         guard let panel else { return }
         UserDefaults.standard.set(Double(panel.frame.origin.x), forKey: Self.originXKey)
         UserDefaults.standard.set(Double(panel.frame.origin.y), forKey: Self.originYKey)
-    }
-
-    // origin 点だけでなく frame が重なるスクリーンで判定する (origin 点のみだと左/下方向の
-    // ドラッグで origin 自体が画面外に出て復元拒否になる)。見つからなければ既定位置にする
-    nonisolated static func clampedRestoreOrigin(_ origin: NSPoint, size: NSSize, screenFrames: [NSRect]) -> NSPoint? {
-        let frame = NSRect(origin: origin, size: size)
-        guard let screenFrame = screenFrames.first(where: { $0.intersects(frame) }) else {
-            return nil
-        }
-        return clampedOrigin(origin: origin, size: size, screenFrame: screenFrame)
     }
 
     private func savedOrigin() -> NSPoint? {
