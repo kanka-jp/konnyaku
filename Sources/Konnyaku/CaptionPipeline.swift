@@ -294,9 +294,10 @@ final class CaptionPipeline {
     // 閾値超過後、末尾付近に句読点があれば区切りとして確定要求する。無ければ閾値の 1.5 倍まで
     // 保留し Speech 側の自然な final 発火を待つ (純関数・テスト対象)
     nonisolated static func shouldForceFinalize(text: String, threshold: Int) -> Bool {
-        guard text.count >= threshold else { return false }
+        let count = text.count
+        guard count >= threshold else { return false }
         let hardLimit = Int(Double(threshold) * forceFinalizeGraceMultiplier)
-        if text.count >= hardLimit { return true }
+        if count >= hardLimit { return true }
         return text.suffix(forceFinalizePunctuationTailWindow)
             .contains { sentenceBreakPunctuation.contains($0) }
     }
