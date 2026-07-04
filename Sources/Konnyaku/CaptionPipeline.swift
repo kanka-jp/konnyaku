@@ -191,16 +191,18 @@ final class CaptionPipeline {
     }
 
     // 稼働中にリアルタイム翻訳 ON/OFF を切り替える。パイプライン全体を再起動せず追従訳 worker だけ
-    // 起動・停止する。確定訳 worker が動いていなければ (= 翻訳自体が無効) 無視する
+    // 起動・停止する。確定訳 worker が動いていなければ (= 翻訳自体が無効、例: notInstalled で
+    // 終了済み) false を返し、呼び出し元がフル再起動へフォールバックできるようにする
+    @discardableResult
     func updateVolatileTranslationEnabled(
         _ enabled: Bool,
         inputLanguage: Locale.Language,
         outputLanguage: Locale.Language,
         lowLatency: Bool
-    ) {
-        guard translationTask != nil else { return }
+    ) -> Bool {
+        guard translationTask != nil else { return false }
         let isActive = volatileTranslationTask != nil || volatileTranslationStartTask != nil
-        guard enabled != isActive else { return }
+        guard enabled != isActive else { return true }
         if enabled {
             // detached: 呼び出し元 Task のキャンセルを継承すると、resolvePair 待ち中に
             // 呼び出し元が終了しただけで ON 要求が握り潰され isActive が true のまま残る
@@ -225,6 +227,7 @@ final class CaptionPipeline {
             // worker 停止だけでは表示中の追従訳が残り続けるため明示的にクリアする
             state.setVolatileTranslation("", generation: state.volatileGeneration)
         }
+        return true
     }
 
     // volatile の伸びを診断ログに残す (毎更新は noise のため 10 字刻みの閾値跨ぎのみ)

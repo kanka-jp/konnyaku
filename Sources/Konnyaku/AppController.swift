@@ -103,7 +103,7 @@ final class AppController {
     // 再実行の防止)。非稼働中・start/stop 進行中 (isBusy) は値の保存のみ
     func setCorrectionEnabled(_ enabled: Bool) {
         correctionEnabled = enabled
-        // languageRestartTask 進行中 (言語/strategy 変更の再起動待ち) は worker を差し替えず、
+        // 再起動進行中 (言語/strategy 変更の待ち、isLanguageRestartInFlight) は worker を差し替えず、
         // 完了後の再起動 (start() の sync または新設定での起動) に反映を委ねる
         guard state.isRunning, !isBusy, !isLanguageRestartInFlight, let pipeline else { return }
         pipeline.updateCorrectionEnabled(
@@ -127,12 +127,17 @@ final class AppController {
         // 言語ペア変更の再起動待ち中は差し替えない (稼働中の確定訳 worker と異なる
         // 言語ペアで追従訳 worker が起動する食い違いを防ぐ)
         guard state.isRunning, !isBusy, !isLanguageRestartInFlight, let pipeline else { return }
-        pipeline.updateVolatileTranslationEnabled(
+        let handled = pipeline.updateVolatileTranslationEnabled(
             enabled,
             inputLanguage: languages.inputLocale.language,
             outputLanguage: languages.outputLanguage,
             lowLatency: activeUseLowLatencyTranslation
         )
+        // 確定訳 worker が notInstalled 等で終了済みだと部分更新は無視されるため、
+        // ON 要求時のみフル再起動で復旧を試みる (OFF は no-op のままでよい)
+        if enabled, !handled {
+            scheduleLanguageRestart(replanDownload: false)
+        }
     }
 
     // start() 完了直後に現在の補正/追従訳設定を pipeline へ反映する (start 進行中の
