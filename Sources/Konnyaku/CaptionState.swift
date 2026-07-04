@@ -12,6 +12,9 @@ final class CaptionState {
     struct Line {
         var text: String
         var addedAt: Date
+        // 確定時点の volatileGeneration。同一テキストの重複行を FIFO 順序ではなく
+        // 世代で一意に識別するために使う (replaceFinalSource 参照)
+        var generation: Int
     }
 
     private(set) var volatileSource = ""
@@ -60,9 +63,12 @@ final class CaptionState {
     }
 
     func appendFinalSource(_ text: String, at now: Date = Date()) {
+        // increment 前の値を記録する。呼び出し元 (CaptionPipeline) が既に持つ
+        // generation と同じ考え方で、replaceFinalSource の対象特定に使う
+        let generation = volatileGeneration
         volatileSource = ""
         volatileGeneration += 1
-        sourceLines.append(Line(text: text, addedAt: now))
+        sourceLines.append(Line(text: text, addedAt: now, generation: generation))
         if sourceLines.count > Self.maxSourceLines {
             sourceLines.removeFirst(sourceLines.count - Self.maxSourceLines)
         }
@@ -89,10 +95,11 @@ final class CaptionState {
         volatileTranslationGeneration = -1
     }
 
-    // 対象行が既に流れた場合に無関係な行を上書きしない guard。補正は FIFO 処理のため
-    // 重複テキストは最古の一致行が対象。addedAt 更新は差し替え直後の失効を防ぐ
-    func replaceFinalSource(_ old: String, with new: String, at now: Date = Date()) {
-        guard let index = sourceLines.firstIndex(where: { $0.text == old }) else { return }
+    // 文字列一致だけでは補正完了順序の入れ替わりで誤った行を差し替えるため generation で
+    // 一意特定する (text は既に流れた行を上書きしない guard、addedAt は差し替え直後の失効防止)
+    func replaceFinalSource(_ old: String, with new: String, generation: Int, at now: Date = Date()) {
+        guard let index = sourceLines.firstIndex(where: { $0.generation == generation && $0.text == old })
+        else { return }
         sourceLines[index].text = new
         sourceLines[index].addedAt = now
     }
@@ -106,7 +113,7 @@ final class CaptionState {
             volatileTranslation = ""
             volatileTranslationGeneration = -1
         }
-        translatedLines.append(Line(text: text, addedAt: now))
+        translatedLines.append(Line(text: text, addedAt: now, generation: generation))
         if translatedLines.count > Self.maxTranslatedLines {
             translatedLines.removeFirst(translatedLines.count - Self.maxTranslatedLines)
         }

@@ -35,9 +35,16 @@ final class AppController {
     private var isStarting = false
     private var didAttemptAutoStart = false
     private var pendingLanguageRestart = false
+    // 稼働中の worker 差し替えは preferLowLatencyTranslation でなく直近 start() が解決した
+    // strategy を使う (plan() のフォールバックとの食い違い防止)
+    private var activeUseLowLatencyTranslation = false
     // 繰り越し再起動が DL 待機状態の再計画 (start やり直し) まで行うか。DL 要否に
     // 影響しない設定は false で予約し、進行中 DL を捨てない
     private var pendingRestartReplansDownload = false
+    // scheduleLanguageRestart がキューした再起動処理の進行中カウント。Task 自体でなく
+    // カウントで管理するのは、連続再起動時に先勝ちタスクの完了が後発タスクの保護区間を誤って解除するのを防ぐため
+    private var languageRestartInFlightCount = 0
+    private var isLanguageRestartInFlight: Bool { languageRestartInFlightCount > 0 }
 
     var correctionEnabled: Bool {
         didSet {
@@ -92,9 +99,15 @@ final class AppController {
         await languages.loadAvailable()
     }
 
+    // 稼働中は worker だけ差し替え全体再起動を避ける (体感の途切れ・prepareTranslation
+    // 再実行の防止)。非稼働中・start/stop 進行中 (isBusy) は値の保存のみ
     func setCorrectionEnabled(_ enabled: Bool) {
         correctionEnabled = enabled
-        scheduleLanguageRestart()
+        // 再起動進行中 (言語/strategy 変更の待ち、isLanguageRestartInFlight) は worker を差し替えず、
+        // 完了後の再起動 (start() の sync または新設定での起動) に反映を委ねる
+        guard state.isRunning, !isBusy, !isLanguageRestartInFlight, let pipeline else { return }
+        pipeline.updateCorrectionEnabled(
+            enabled, inputLocale: languages.inputLocale, vocabulary: VocabularyStore.load())
     }
 
     func setPreferLowLatencyTranslation(_ enabled: Bool) {
@@ -107,12 +120,38 @@ final class AppController {
         scheduleLanguageRestart()
     }
 
+    // 稼働中はパイプライン全体を再起動せず追従訳 worker だけ差し替える。非稼働中は
+    // 値の保存のみで、次回 start() が読む。start/stop 進行中 (isBusy) は何もしない
     func setRealtimeTranslationEnabled(_ enabled: Bool) {
         realtimeTranslationEnabled = enabled
-        // モデル DL 要否に影響しない設定のため replanDownload = false で予約する
-        // (稼働中・start 進行中は再起動で反映、DL 待機のみの状態では進行中 DL を守り
-        //  保存に留める — DL 完了後の自動 start が最新値を読む)
-        scheduleLanguageRestart(replanDownload: false)
+        // 言語ペア変更の再起動待ち中は差し替えない (稼働中の確定訳 worker と異なる
+        // 言語ペアで追従訳 worker が起動する食い違いを防ぐ)
+        guard state.isRunning, !isBusy, !isLanguageRestartInFlight, let pipeline else { return }
+        let handled = pipeline.updateVolatileTranslationEnabled(
+            enabled,
+            inputLanguage: languages.inputLocale.language,
+            outputLanguage: languages.outputLanguage,
+            lowLatency: activeUseLowLatencyTranslation
+        )
+        // 確定訳 worker が notInstalled 等で終了済みだと部分更新は無視されるため、
+        // ON 要求時のみフル再起動で復旧を試みる (OFF は no-op のままでよい)
+        if enabled, !handled {
+            scheduleLanguageRestart(replanDownload: false)
+        }
+    }
+
+    // start() 完了直後に現在の補正/追従訳設定を pipeline へ反映する (start 進行中の
+    // トグル変更を取りこぼさないため)。値が変わっていなければ各 worker 側で no-op
+    private func syncPipelineTogglesWithCurrentSettings() {
+        guard state.isRunning, let pipeline else { return }
+        pipeline.updateCorrectionEnabled(
+            correctionEnabled, inputLocale: languages.inputLocale, vocabulary: VocabularyStore.load())
+        pipeline.updateVolatileTranslationEnabled(
+            realtimeTranslationEnabled,
+            inputLanguage: languages.inputLocale.language,
+            outputLanguage: languages.outputLanguage,
+            lowLatency: activeUseLowLatencyTranslation
+        )
     }
 
     func editVocabulary() {
@@ -314,6 +353,11 @@ final class AppController {
         defer {
             isStarting = false
             isBusy = false
+            // pendingLanguageRestart 時は直後のフル再起動に任せ sync をスキップする
+            // (sync すると旧言語ペアの確定訳 worker と食い違う中間状態を作るため)
+            if !pendingLanguageRestart {
+                syncPipelineTogglesWithCurrentSettings()
+            }
             consumePendingLanguageRestart()
         }
         state.statusMessage = nil
@@ -335,13 +379,19 @@ final class AppController {
         }
 
         var useLowLatencyTranslation = false
+        // translationEnabled が false の間は未使用 (CaptionPipeline.start に渡すだけで
+        // 参照されない)。resolvePair は非同期呼び出しのため、翻訳無効時は省略する
+        var resolvedPair: (source: Locale.Language, target: Locale.Language) =
+            (inputLocale.language, outputLanguage)
         if translationEnabled {
             // 実翻訳セッション (CaptionPipeline の worker) と同じ resolvePair 済みペアで
-            // 可用性を判定し、チェック対象とセッション対象の不一致を防ぐ
+            // 可用性を判定し、チェック対象とセッション対象の不一致を防ぐ。CaptionPipeline
+            // 側にもこのペアをそのまま渡し、worker 内での再解決 (3 重呼び出し) を避ける
             let pair = await TranslationSupport.resolvePair(
                 input: inputLocale.language,
                 output: outputLanguage
             )
+            resolvedPair = pair
             let plan = await TranslationSupport.plan(
                 from: pair.source,
                 to: pair.target,
@@ -396,6 +446,7 @@ final class AppController {
                 break
             }
         }
+        activeUseLowLatencyTranslation = useLowLatencyTranslation
 
         state.reset()
         let pipeline = CaptionPipeline(state: state) { [weak self] in
@@ -417,6 +468,8 @@ final class AppController {
                 volatileTranslationEnabled: realtimeTranslationEnabled,
                 correctionEnabled: correctionEnabled,
                 contextualTerms: VocabularyStore.load(),
+                resolvedSource: resolvedPair.source,
+                resolvedTarget: resolvedPair.target,
                 onSpeechModelDownload: { [weak self] progress in
                     if let progress {
                         self?.beginSpeechModelDownload(progress)
@@ -462,8 +515,10 @@ final class AppController {
         }
         // 停止処理中の変更は次回 start が最新の言語設定を読むため何もしない
         guard !isBusy else { return }
-        Task {
-            await restartIfRunning(replanDownload: replanDownload)
+        languageRestartInFlightCount += 1
+        Task { [weak self] in
+            await self?.restartIfRunning(replanDownload: replanDownload)
+            self?.languageRestartInFlightCount -= 1
         }
     }
 
@@ -475,8 +530,10 @@ final class AppController {
         pendingLanguageRestart = false
         let replanDownload = pendingRestartReplansDownload
         pendingRestartReplansDownload = false
-        Task {
-            await restartIfRunning(replanDownload: replanDownload)
+        languageRestartInFlightCount += 1
+        Task { [weak self] in
+            await self?.restartIfRunning(replanDownload: replanDownload)
+            self?.languageRestartInFlightCount -= 1
         }
     }
 
