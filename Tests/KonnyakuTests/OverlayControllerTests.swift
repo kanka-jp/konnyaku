@@ -203,4 +203,22 @@ struct OverlayControllerTests {
         )
         #expect(target == main)
     }
+
+    // resetPosition の契約はパネル非表示でも保存 origin を消すこと (defer が guard より先に登録される)。
+    // defer の削除や guard 後への移動で「初期位置に戻す」が silent no-op になる regression を防ぐ
+    @Test @MainActor
+    func resetPositionClearsSavedOriginEvenWithoutPanel() {
+        let defaults = UserDefaults.standard
+        defaults.set(123.0, forKey: OverlayController.originXKey)
+        defaults.set(45.0, forKey: OverlayController.originYKey)
+        defer {
+            defaults.removeObject(forKey: OverlayController.originXKey)
+            defaults.removeObject(forKey: OverlayController.originYKey)
+        }
+
+        OverlayController().resetPosition(fontScale: 1.0)
+
+        #expect(defaults.object(forKey: OverlayController.originXKey) == nil)
+        #expect(defaults.object(forKey: OverlayController.originYKey) == nil)
+    }
 }

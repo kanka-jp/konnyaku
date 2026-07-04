@@ -180,7 +180,25 @@ final class AppController {
 
     func setOverlayMovable(_ movable: Bool) {
         settings.isMovable = movable
+        if movable {
+            // 停止中でも位置調整できるようにする (SubtitleView がサンプル行を表示する)
+            showOverlay()
+        } else if pipeline == nil {
+            // isRunning 判定だと start 進行中 (モデル準備中で isRunning=false) の OFF で
+            // 隠したまま誰も再表示しない。字幕表示に用がある間は pipeline が非 nil
+            overlay.hide()
+        }
         overlay.setMovable(movable)
+    }
+
+    func resetOverlayPosition() {
+        overlay.resetPosition(fontScale: settings.fontScale)
+    }
+
+    private func showOverlay() {
+        overlay.show(state: state, settings: settings, languages: languages) { [weak self] in
+            self?.setOverlayMovable(false)
+        }
     }
 
     func setInputLanguage(_ identifier: String) {
@@ -470,7 +488,7 @@ final class AppController {
             }
         }
         self.pipeline = pipeline
-        overlay.show(state: state, settings: settings)
+        showOverlay()
         overlay.setMovable(settings.isMovable)
         do {
             state.statusMessage = t("status.preparing")
@@ -504,7 +522,7 @@ final class AppController {
                 state.statusMessage = "\(t("status.start_failed")): \(error.localizedDescription)"
             }
             await pipeline.stop()
-            overlay.hide()
+            hideOverlayUnlessAdjusting()
             self.pipeline = nil
         }
     }
@@ -515,6 +533,13 @@ final class AppController {
         defer { isBusy = false }
         await pipeline?.stop()
         pipeline = nil
+        hideOverlayUnlessAdjusting()
+    }
+
+    // オーバーレイの可視条件は「字幕稼働中 or 位置調整中」。停止しても調整モードなら
+    // プレビューを残し、調整途中の位置が見えないまま中断されるのを防ぐ
+    private func hideOverlayUnlessAdjusting() {
+        guard !settings.isMovable else { return }
         overlay.hide()
     }
 

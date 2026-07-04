@@ -70,7 +70,6 @@ private struct MenuContent: View {
             get: { controller.settings.isMovable },
             set: { controller.setOverlayMovable($0) }
         ))
-        .disabled(!controller.state.isRunning)
 
         Divider()
 

@@ -538,7 +538,8 @@ final class CaptionPipeline {
         pruneTask?.cancel()
         pruneTask = nil
         state.isRunning = false
-        // pruneTask も止まるため、追従訳を残すと失効せず表示に残り続ける
+        // pruneTask も止まるため、残した表示は失効せず残り続ける (確定行も含めて消す)
         state.clearVolatile()
+        state.clearFinalLines()
     }
 }

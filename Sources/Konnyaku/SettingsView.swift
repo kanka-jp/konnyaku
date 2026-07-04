@@ -76,6 +76,26 @@ struct SettingsView: View {
                     .accessibilityLabel(t("settings.font_size.increase"))
                 }
                 .buttonStyle(.bordered)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text(t("settings.overlay_position"))
+                        Spacer()
+                        Button(controller.settings.isMovable
+                            ? t("settings.overlay_position.finish")
+                            : t("settings.overlay_position.adjust")
+                        ) {
+                            controller.setOverlayMovable(!controller.settings.isMovable)
+                        }
+                        Button(t("settings.overlay_position.reset")) {
+                            controller.resetOverlayPosition()
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    Text(t("settings.overlay_position.help"))
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Section(t("settings.section.correction")) {

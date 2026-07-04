@@ -65,7 +65,12 @@ final class OverlayController: NSObject, NSWindowDelegate {
         return frame
     }
 
-    func show(state: CaptionState, settings: OverlaySettings) {
+    func show(
+        state: CaptionState,
+        settings: OverlaySettings,
+        languages: LanguageSettings,
+        onFinishMoving: @escaping () -> Void
+    ) {
         if let panel {
             panel.orderFrontRegardless()
             return
@@ -92,7 +97,9 @@ final class OverlayController: NSObject, NSWindowDelegate {
         panel.hidesOnDeactivate = false
         panel.isReleasedWhenClosed = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        panel.contentView = NSHostingView(rootView: SubtitleView(state: state, settings: settings))
+        panel.contentView = NSHostingView(
+            rootView: SubtitleView(
+                state: state, settings: settings, languages: languages, onFinishMoving: onFinishMoving))
         panel.delegate = self
         panel.orderFrontRegardless()
         self.panel = panel
@@ -101,6 +108,24 @@ final class OverlayController: NSObject, NSWindowDelegate {
     func hide() {
         panel?.orderOut(nil)
         panel = nil
+    }
+
+    // setFrame が発火させる windowDidMove の再保存を defer の削除で打ち消し、
+    // 未ドラッグの初期状態 (保存 origin なし) に完全に戻す
+    func resetPosition(fontScale: Double) {
+        defer {
+            UserDefaults.standard.removeObject(forKey: Self.originXKey)
+            UserDefaults.standard.removeObject(forKey: Self.originYKey)
+        }
+        guard let panel, let mainScreen = NSScreen.main else { return }
+        let frame = Self.resolvedShowFrame(
+            fontScale: fontScale,
+            savedOrigin: nil,
+            screenFrames: NSScreen.screens.map(\.visibleFrame),
+            mainScreenFrame: mainScreen.visibleFrame,
+            margin: Self.margin
+        )
+        panel.setFrame(frame, display: true)
     }
 
     // origin が画面外にはみ出さない範囲にクランプする (はみ出す分だけ最小限ずらす。
