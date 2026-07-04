@@ -52,15 +52,30 @@ struct SettingsView: View {
             }
 
             Section(t("settings.section.display")) {
-                Picker(t("settings.font_size"), selection: Binding(
-                    get: { controller.settings.fontScale },
-                    set: { controller.settings.fontScale = $0 }
-                )) {
-                    ForEach(OverlaySettings.fontScales) { scale in
-                        Text(t(scale.labelKey)).tag(scale.id)
+                HStack {
+                    Text(t("settings.font_size"))
+                    Spacer()
+                    Button {
+                        controller.settings.decreaseFontScale()
+                    } label: {
+                        Image(systemName: "minus")
                     }
+                    .disabled(!controller.settings.canDecreaseFontScale)
+                    .accessibilityLabel(t("settings.font_size.decrease"))
+
+                    Text("\(Int((controller.settings.fontScale * 100).rounded()))%")
+                        .monospacedDigit()
+                        .frame(minWidth: 44)
+
+                    Button {
+                        controller.settings.increaseFontScale()
+                    } label: {
+                        Image(systemName: "plus")
+                    }
+                    .disabled(!controller.settings.canIncreaseFontScale)
+                    .accessibilityLabel(t("settings.font_size.increase"))
                 }
-                .pickerStyle(.segmented)
+                .buttonStyle(.bordered)
             }
 
             Section(t("settings.section.correction")) {

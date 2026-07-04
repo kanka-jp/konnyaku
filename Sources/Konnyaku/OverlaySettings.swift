@@ -4,16 +4,7 @@ import Observation
 @MainActor
 @Observable
 final class OverlaySettings {
-    struct FontScale: Identifiable, Equatable {
-        let id: Double
-        let labelKey: String
-    }
-
-    static let fontScales: [FontScale] = [
-        FontScale(id: 0.8, labelKey: "font.small"),
-        FontScale(id: 1.0, labelKey: "font.regular"),
-        FontScale(id: 1.3, labelKey: "font.large"),
-    ]
+    static let fontScales: [Double] = [0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3]
 
     var fontScale: Double {
         didSet {
@@ -25,6 +16,28 @@ final class OverlaySettings {
 
     init(config: [String: String]) {
         let saved = config[ConfigStore.fontScaleKey].flatMap(Double.init) ?? 1.0
-        fontScale = Self.fontScales.contains { $0.id == saved } ? saved : 1.0
+        fontScale = Self.fontScales.contains(saved) ? saved : 1.0
+    }
+
+    private var fontScaleIndex: Int {
+        Self.fontScales.firstIndex(of: fontScale) ?? Self.fontScales.firstIndex(of: 1.0) ?? 0
+    }
+
+    var canDecreaseFontScale: Bool {
+        fontScaleIndex > 0
+    }
+
+    var canIncreaseFontScale: Bool {
+        fontScaleIndex < Self.fontScales.count - 1
+    }
+
+    func decreaseFontScale() {
+        guard canDecreaseFontScale else { return }
+        fontScale = Self.fontScales[fontScaleIndex - 1]
+    }
+
+    func increaseFontScale() {
+        guard canIncreaseFontScale else { return }
+        fontScale = Self.fontScales[fontScaleIndex + 1]
     }
 }

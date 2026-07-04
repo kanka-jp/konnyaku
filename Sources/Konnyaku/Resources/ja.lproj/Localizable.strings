@@ -17,16 +17,14 @@
 "settings.realtime_translation" = "話し中のリアルタイム翻訳";
 "settings.realtime_translation.help" = "オフにすると文の確定を待ってから翻訳します";
 "settings.font_size" = "文字サイズ";
+"settings.font_size.decrease" = "文字を小さくする";
+"settings.font_size.increase" = "文字を大きくする";
 "settings.correction" = "AI で文字起こしを補正";
 "settings.edit_vocabulary" = "カスタム語彙を編集…";
 "settings.auto_start" = "起動時に字幕を自動で開始";
 
 "strategy.low_latency" = "速度優先 (lowLatency)";
 "strategy.high_fidelity" = "品質優先 (highFidelity)";
-
-"font.small" = "小";
-"font.regular" = "標準";
-"font.large" = "大";
 
 "status.mic_denied" = "マイクへのアクセスが許可されていません (システム設定 > プライバシーとセキュリティ)";
 "status.model_downloading" = "翻訳モデルをダウンロード中… (完了すると自動で開始します)";
