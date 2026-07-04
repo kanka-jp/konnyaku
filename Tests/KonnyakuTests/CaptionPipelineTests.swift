@@ -71,4 +71,19 @@ struct CaptionPipelineTests {
             shouldRun: true, hasPendingCorrection: true, hasActiveCorrectionTask: false
         ) == .noop)
     }
+
+    // notInstalled 等で確定訳 worker が終了済み (translationTask == nil) の場合、部分更新は
+    // 無視される。呼び出し元 (AppController) がこの false を見てフル再起動へフォールバックする
+    @Test
+    @MainActor
+    func updateVolatileTranslationEnabledReturnsFalseWhenTranslationWorkerIsNotRunning() {
+        let pipeline = CaptionPipeline(state: CaptionState()) {}
+        let handled = pipeline.updateVolatileTranslationEnabled(
+            true,
+            inputLanguage: Locale.Language(identifier: "en"),
+            outputLanguage: Locale.Language(identifier: "ja"),
+            lowLatency: false
+        )
+        #expect(!handled)
+    }
 }
