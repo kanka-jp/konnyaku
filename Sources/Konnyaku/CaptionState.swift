@@ -17,6 +17,17 @@ final class CaptionState {
         var generation: Int
     }
 
+    struct DisplayLine: Identifiable, Equatable {
+        enum Kind: Equatable {
+            case final
+            case volatile
+        }
+
+        let id: Int
+        let text: String
+        let kind: Kind
+    }
+
     private(set) var volatileSource = ""
     private(set) var volatileTranslation = ""
     private(set) var sourceLines: [Line] = []
@@ -32,18 +43,22 @@ final class CaptionState {
     // 次の文の追従訳を巻き添えクリアしないための判定に使う
     private var volatileTranslationGeneration = -1
 
-    var sourceDisplayLines: [String] {
-        var lines = sourceLines.map(\.text)
+    var sourceDisplayLines: [DisplayLine] {
+        var lines = sourceLines.enumerated().map { offset, line in
+            DisplayLine(id: offset, text: line.text, kind: .final)
+        }
         if !volatileSource.isEmpty {
-            lines.append(volatileSource)
+            lines.append(DisplayLine(id: lines.count, text: volatileSource, kind: .volatile))
         }
         return lines
     }
 
-    var translationDisplayLines: [String] {
-        var lines = translatedLines.map(\.text)
+    var translationDisplayLines: [DisplayLine] {
+        var lines = translatedLines.enumerated().map { offset, line in
+            DisplayLine(id: offset, text: line.text, kind: .final)
+        }
         if !volatileTranslation.isEmpty {
-            lines.append(volatileTranslation)
+            lines.append(DisplayLine(id: lines.count, text: volatileTranslation, kind: .volatile))
         }
         return lines
     }

@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct SubtitleView: View {
+    private static let volatileOpacity: Double = 0.65
+
     let state: CaptionState
     let settings: OverlaySettings
 
@@ -45,12 +47,13 @@ struct SubtitleView: View {
             .background(.black.opacity(0.75), in: Capsule())
     }
 
-    private func subtitleBlock(_ lines: [String], size: CGFloat, weight: Font.Weight, color: Color) -> some View {
+    private func subtitleBlock(_ lines: [CaptionState.DisplayLine], size: CGFloat, weight: Font.Weight, color: Color) -> some View {
         VStack(spacing: 2) {
-            ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
-                Text(line)
+            ForEach(lines) { line in
+                Text(line.text)
                     .font(.system(size: size, weight: weight))
                     .foregroundStyle(color)
+                    .opacity(line.kind == .volatile ? Self.volatileOpacity : 1)
                     .shadow(color: .black.opacity(0.8), radius: 1, x: 0, y: 1)
                     .lineLimit(2)
                     // 折り返し超過時は話し続けている最新語 (末尾) を優先表示する
