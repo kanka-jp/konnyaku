@@ -19,24 +19,36 @@ final class OverlayController: NSObject, NSWindowDelegate {
         return min(max(minimumHeight, baseHeight * fontScale), availableHeight - margin * 2)
     }
 
+    // 保存済み origin が属するスクリーンがあればその frame を使う (main 基準のままだと
+    // より小さいセカンダリモニターへ復元する際に height がそのスクリーンに収まらない)
+    nonisolated static func targetScreenFrame(savedOrigin: NSPoint?, screenFrames: [NSRect], mainScreenFrame: NSRect) -> NSRect {
+        guard let savedOrigin else { return mainScreenFrame }
+        return screenFrames.first(where: { $0.contains(savedOrigin) }) ?? mainScreenFrame
+    }
+
     func show(state: CaptionState, settings: OverlaySettings) {
         if let panel {
             panel.orderFrontRegardless()
             return
         }
-        guard let screen = NSScreen.main else { return }
+        guard let mainScreen = NSScreen.main else { return }
+        let screenFrames = NSScreen.screens.map(\.visibleFrame)
+        let saved = savedOrigin()
+        let targetScreen = Self.targetScreenFrame(
+            savedOrigin: saved, screenFrames: screenFrames, mainScreenFrame: mainScreen.visibleFrame
+        )
         let height = Self.panelHeight(
             fontScale: settings.fontScale,
-            availableHeight: screen.visibleFrame.height,
+            availableHeight: targetScreen.height,
             margin: Self.margin
         )
         var frame = NSRect(
-            x: screen.visibleFrame.minX + Self.margin,
-            y: screen.visibleFrame.minY + Self.margin,
-            width: screen.visibleFrame.width - Self.margin * 2,
+            x: targetScreen.minX + Self.margin,
+            y: targetScreen.minY + Self.margin,
+            width: targetScreen.width - Self.margin * 2,
             height: height
         )
-        if let restored = restoredOrigin(size: frame.size) {
+        if let saved, let restored = Self.clampedRestoreOrigin(saved, size: frame.size, screenFrames: screenFrames) {
             frame.origin = restored
         }
         let panel = NSPanel(
@@ -111,26 +123,25 @@ final class OverlayController: NSObject, NSWindowDelegate {
         UserDefaults.standard.set(Double(panel.frame.origin.y), forKey: Self.originYKey)
     }
 
-    // origin が属するスクリーンが見つかった場合のみ clampedOrigin で収めて復元する
-    // (見つからない = モニター構成変更で見えなくなった場合は既定位置にする)
+    // origin 点だけでなく frame が重なるスクリーンで判定する (origin 点のみだと左/下方向の
+    // ドラッグで origin 自体が画面外に出て復元拒否になる)。見つからなければ既定位置にする
     nonisolated static func clampedRestoreOrigin(_ origin: NSPoint, size: NSSize, screenFrames: [NSRect]) -> NSPoint? {
-        guard let screenFrame = screenFrames.first(where: { $0.contains(origin) }) else {
+        let frame = NSRect(origin: origin, size: size)
+        guard let screenFrame = screenFrames.first(where: { $0.intersects(frame) }) else {
             return nil
         }
         return clampedOrigin(origin: origin, size: size, screenFrame: screenFrame)
     }
 
-    // 保存済み位置が現在のスクリーン構成で見える場合のみ復元する
-    private func restoredOrigin(size: NSSize) -> NSPoint? {
+    private func savedOrigin() -> NSPoint? {
         let defaults = UserDefaults.standard
         guard defaults.object(forKey: Self.originXKey) != nil,
               defaults.object(forKey: Self.originYKey) != nil else {
             return nil
         }
-        let origin = NSPoint(
+        return NSPoint(
             x: defaults.double(forKey: Self.originXKey),
             y: defaults.double(forKey: Self.originYKey)
         )
-        return Self.clampedRestoreOrigin(origin, size: size, screenFrames: NSScreen.screens.map(\.visibleFrame))
     }
 }

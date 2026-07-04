@@ -35,8 +35,11 @@ struct OverlayControllerTests {
 
     @Test
     func panelHeightAtMaxFontScaleFitsWithinTypicalScreen() {
-        let height = OverlayController.panelHeight(fontScale: 2.0, availableHeight: 900, margin: 24)
+        let availableHeight: CGFloat = 900
+        let margin: CGFloat = 24
+        let height = OverlayController.panelHeight(fontScale: 2.0, availableHeight: availableHeight, margin: margin)
         #expect(height > 380)
+        #expect(height <= availableHeight - margin * 2)
     }
 
     @Test
@@ -110,5 +113,45 @@ struct OverlayControllerTests {
             dragged, size: NSSize(width: 952, height: 380), screenFrames: [screen]
         )
         #expect(result == NSPoint(x: 48, y: 24))
+    }
+
+    @Test
+    func clampedRestoreOriginClampsLeftwardDragInsteadOfRejecting() {
+        let screen = NSRect(x: 0, y: 0, width: 1000, height: 800)
+        let dragged = NSPoint(x: -10, y: 24)
+        let result = OverlayController.clampedRestoreOrigin(
+            dragged, size: NSSize(width: 952, height: 380), screenFrames: [screen]
+        )
+        #expect(result == NSPoint(x: 0, y: 24))
+    }
+
+    @Test
+    func targetScreenFrameUsesMainScreenWhenNoSavedOrigin() {
+        let main = NSRect(x: 0, y: 0, width: 1000, height: 800)
+        let secondary = NSRect(x: 1000, y: 0, width: 600, height: 400)
+        let target = OverlayController.targetScreenFrame(
+            savedOrigin: nil, screenFrames: [main, secondary], mainScreenFrame: main
+        )
+        #expect(target == main)
+    }
+
+    @Test
+    func targetScreenFrameUsesScreenContainingSavedOrigin() {
+        let main = NSRect(x: 0, y: 0, width: 1000, height: 800)
+        let secondary = NSRect(x: 1000, y: 0, width: 600, height: 400)
+        let target = OverlayController.targetScreenFrame(
+            savedOrigin: NSPoint(x: 1200, y: 100), screenFrames: [main, secondary], mainScreenFrame: main
+        )
+        #expect(target == secondary)
+    }
+
+    @Test
+    func targetScreenFrameFallsBackToMainWhenSavedOriginMatchesNoScreen() {
+        let main = NSRect(x: 0, y: 0, width: 1000, height: 800)
+        let secondary = NSRect(x: 1000, y: 0, width: 600, height: 400)
+        let target = OverlayController.targetScreenFrame(
+            savedOrigin: NSPoint(x: 5000, y: 5000), screenFrames: [main, secondary], mainScreenFrame: main
+        )
+        #expect(target == main)
     }
 }
