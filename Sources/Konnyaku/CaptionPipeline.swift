@@ -219,9 +219,7 @@ final class CaptionPipeline {
         }
     }
 
-    // 稼働中にリアルタイム翻訳 ON/OFF を切り替える。パイプライン全体を再起動せず追従訳 worker だけ
-    // 起動・停止する。確定訳 worker が動いていなければ (= 翻訳自体が無効、例: notInstalled で
-    // 終了済み) false を返し、呼び出し元がフル再起動へフォールバックできるようにする
+    // 確定訳 worker が停止済み (notInstalled 等) なら false を返し、呼び出し元のフル再起動フォールバックを許容する
     @discardableResult
     func updateVolatileTranslationEnabled(
         _ enabled: Bool,
