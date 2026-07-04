@@ -13,28 +13,28 @@ struct OverlaySettingsTests {
 
     @Test
     func increaseFontScaleStepsThroughAllLevelsThenDisallowsFurtherIncrease() {
-        let settings = OverlaySettings(config: ["font-scale": "0.7"])
-        for expected in [0.8, 0.9, 1.0, 1.1, 1.2, 1.3] {
+        let settings = OverlaySettings(config: ["font-scale": "0.5"])
+        for expected in [0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2.0] {
             #expect(settings.canIncreaseFontScale)
             settings.increaseFontScale()
             #expect(settings.fontScale == expected)
         }
         #expect(!settings.canIncreaseFontScale)
         settings.increaseFontScale()
-        #expect(settings.fontScale == 1.3)
+        #expect(settings.fontScale == 2.0)
     }
 
     @Test
     func decreaseFontScaleStepsThroughAllLevelsThenDisallowsFurtherDecrease() {
-        let settings = OverlaySettings(config: ["font-scale": "1.3"])
-        for expected in [1.2, 1.1, 1.0, 0.9, 0.8, 0.7] {
+        let settings = OverlaySettings(config: ["font-scale": "2.0"])
+        for expected in [1.9, 1.8, 1.7, 1.6, 1.5, 1.4, 1.3, 1.2, 1.1, 1.0, 0.9, 0.8, 0.7, 0.6, 0.5] {
             #expect(settings.canDecreaseFontScale)
             settings.decreaseFontScale()
             #expect(settings.fontScale == expected)
         }
         #expect(!settings.canDecreaseFontScale)
         settings.decreaseFontScale()
-        #expect(settings.fontScale == 0.7)
+        #expect(settings.fontScale == 0.5)
     }
 
     @Test
@@ -51,7 +51,7 @@ struct OverlaySettingsTests {
 
     @Test
     func initAcceptsExistingLegacyValues() {
-        for legacy in [0.8, 1.0, 1.3] {
+        for legacy in [0.7, 0.8, 1.0, 1.3] {
             let settings = OverlaySettings(config: ["font-scale": String(legacy)])
             #expect(settings.fontScale == legacy)
         }
