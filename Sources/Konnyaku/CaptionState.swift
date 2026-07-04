@@ -110,6 +110,13 @@ final class CaptionState {
         volatileTranslationGeneration = -1
     }
 
+    // 停止後は pruneTask が止まり確定行が時間失効しない。調整モードでは停止後も
+    // overlay が可視のため、残すと前回の字幕がプレビューを塞いだまま固定表示される
+    func clearFinalLines() {
+        sourceLines = []
+        translatedLines = []
+    }
+
     // 文字列一致だけでは補正完了順序の入れ替わりで誤った行を差し替えるため generation で
     // 一意特定する (text は既に流れた行を上書きしない guard、addedAt は差し替え直後の失効防止)
     func replaceFinalSource(_ old: String, with new: String, generation: Int, at now: Date = Date()) {

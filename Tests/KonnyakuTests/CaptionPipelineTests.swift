@@ -4,6 +4,22 @@ import Testing
 @testable import Konnyaku
 
 struct CaptionPipelineTests {
+    // stop 後は pruneTask が止まり確定行が時間失効しないため、stop 自身が確定行を消す
+    // 契約を固定する (消さないと停止後の位置調整で前回字幕がプレビューを塞ぐ)
+    @Test
+    @MainActor
+    func stopClearsFinalLinesForStoppedAdjustmentPreview() async {
+        let state = CaptionState()
+        state.appendFinalSource("hello")
+        state.appendTranslation("こんにちは", generation: 0)
+        let pipeline = CaptionPipeline(state: state) {}
+
+        await pipeline.stop()
+
+        #expect(state.sourceDisplayLines.isEmpty)
+        #expect(state.translationDisplayLines.isEmpty)
+    }
+
     @Test
     func shouldForceFinalizeIsFalseBelowThreshold() {
         let text = String(repeating: "あ", count: 39)

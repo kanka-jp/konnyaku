@@ -41,17 +41,17 @@ struct SubtitleView: View {
     }
 
     // 位置調整中に字幕が流れていないと枠線だけで実際の見え方が分からないため
-    private var showsPreview: Bool {
+    var showsPreview: Bool {
         settings.isMovable && state.sourceDisplayLines.isEmpty && state.translationDisplayLines.isEmpty
     }
 
-    private var sourceLines: [CaptionState.DisplayLine] {
+    var sourceLines: [CaptionState.DisplayLine] {
         showsPreview
             ? [CaptionState.DisplayLine(id: 0, text: t("overlay.preview_source"), kind: .final)]
             : state.sourceDisplayLines
     }
 
-    private var translationLines: [CaptionState.DisplayLine] {
+    var translationLines: [CaptionState.DisplayLine] {
         guard showsPreview else { return state.translationDisplayLines }
         // 翻訳無効 (入出力同一言語) だと実表示は source 1 段のみ。プレビューにだけ翻訳行を
         // 出すと bottom-align で実際より高い位置に合わせてしまうため、実表示と段数を揃える
