@@ -76,6 +76,9 @@ final class OverlayController: NSObject, NSWindowDelegate {
         self.onFinishMoving = onFinishMoving
         if let panel {
             panel.orderFrontRegardless()
+            // 字幕パネルだけ前面化すると同 level の操作パネルが背面に隠れ、重なった領域の
+            // 「完了」ボタンが押せなくなるため、z-order を常に操作パネル優位に保つ
+            controlsPanel?.orderFrontRegardless()
             return
         }
         guard let mainScreen = NSScreen.main else { return }
@@ -116,7 +119,10 @@ final class OverlayController: NSObject, NSWindowDelegate {
     // 調整用の操作 UI (ヒント + 完了) は字幕パネルと別の固定パネルに出す。字幕パネル内に
     // 置くとドラッグ面とボタンが重なり、ボタンの位置に字幕を置けない / 掴めないため
     private func showControlsPanel() {
-        guard controlsPanel == nil else { return }
+        if let controlsPanel {
+            controlsPanel.orderFrontRegardless()
+            return
+        }
         let hosting = NSHostingView(rootView: MovingControlsView { [weak self] in
             self?.onFinishMoving?()
         })
