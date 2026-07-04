@@ -99,7 +99,13 @@ final class OverlayController: NSObject, NSWindowDelegate {
         UserDefaults.standard.set(Double(panel.frame.origin.y), forKey: Self.originYKey)
     }
 
-    // 保存済み位置が現在のスクリーン構成で見える場合のみ復元する
+    // fontScale 拡大でパネルが高くなり得るため、部分重複 (intersects) では画面外への
+    // はみ出しを防げない。いずれかのスクリーンに完全に収まるかで判定する
+    nonisolated static func fits(frame: NSRect, in screenFrames: [NSRect]) -> Bool {
+        screenFrames.contains { $0.contains(frame) }
+    }
+
+    // 保存済み位置が現在のスクリーン構成に完全に収まる場合のみ復元する
     private func restoredOrigin(size: NSSize) -> NSPoint? {
         let defaults = UserDefaults.standard
         guard defaults.object(forKey: Self.originXKey) != nil,
@@ -111,9 +117,7 @@ final class OverlayController: NSObject, NSWindowDelegate {
             y: defaults.double(forKey: Self.originYKey)
         )
         let frame = NSRect(origin: origin, size: size)
-        let visible = NSScreen.screens.contains { screen in
-            screen.visibleFrame.intersects(frame)
-        }
-        return visible ? origin : nil
+        let fits = Self.fits(frame: frame, in: NSScreen.screens.map(\.visibleFrame))
+        return fits ? origin : nil
     }
 }

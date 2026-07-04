@@ -48,4 +48,18 @@ struct OverlayControllerTests {
         let expected: CGFloat = 352
         #expect(resized.height == expected)
     }
+
+    @Test
+    func fitsRejectsFrameThatOnlyPartiallyOverlapsScreen() {
+        let screen = NSRect(x: 0, y: 0, width: 1000, height: 800)
+        let overflowing = NSRect(x: 900, y: 0, width: 200, height: 200)
+        #expect(!OverlayController.fits(frame: overflowing, in: [screen]))
+    }
+
+    @Test
+    func fitsAcceptsFrameFullyContainedInAScreen() {
+        let screen = NSRect(x: 0, y: 0, width: 1000, height: 800)
+        let contained = NSRect(x: 24, y: 24, width: 952, height: 380)
+        #expect(OverlayController.fits(frame: contained, in: [screen]))
+    }
 }
