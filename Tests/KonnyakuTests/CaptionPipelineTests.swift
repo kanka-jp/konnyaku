@@ -90,23 +90,23 @@ struct CaptionPipelineTests {
     @Test
     func resolveFinalTextRouteGoesToCorrectionWhenPendingCorrectionExists() {
         #expect(CaptionPipeline.resolveFinalTextRoute(
-            hasPendingCorrection: true, hasPendingCorrectionRestart: true
+            hasPendingCorrection: true, hasDrainingCorrectionTask: true
         ) == .correction)
     }
 
-    // drain 待ち中に直接 pendingSourceText へ流すと補正 ON なのに無補正表示になるため、
-    // 新 worker 起動までバッファへ retain する (regression: 旧実装は直行させていた)
+    // drain 中は直接流すと旧 worker の補正結果を追い越すため、restart 予約の有無に関わらず
+    // バッファへ retain する (regression: 旧実装は OFF 確定時のみ直行させ順序が入れ替わっていた)
     @Test
-    func resolveFinalTextRouteBuffersWhileAwaitingCorrectionRestart() {
+    func resolveFinalTextRouteBuffersWhileCorrectionTaskIsDraining() {
         #expect(CaptionPipeline.resolveFinalTextRoute(
-            hasPendingCorrection: false, hasPendingCorrectionRestart: true
-        ) == .bufferForCorrectionRestart)
+            hasPendingCorrection: false, hasDrainingCorrectionTask: true
+        ) == .bufferUntilDrainCompletes)
     }
 
     @Test
     func resolveFinalTextRouteGoesDirectWhenNoCorrectionPending() {
         #expect(CaptionPipeline.resolveFinalTextRoute(
-            hasPendingCorrection: false, hasPendingCorrectionRestart: false
+            hasPendingCorrection: false, hasDrainingCorrectionTask: false
         ) == .direct)
     }
 }

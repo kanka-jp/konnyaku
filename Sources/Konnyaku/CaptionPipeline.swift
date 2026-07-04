@@ -23,9 +23,8 @@ final class CaptionPipeline {
     // OFF→ON 高速切替時の再起動要求。即座に新規起動すると correctionBacklog 等の
     // 共有状態が二重起動で壊れるため、旧 correctionTask の自然終了を待って適用する
     private var pendingCorrectionRestart: (inputLocale: Locale, vocabulary: [String])?
-    // pendingCorrectionRestart 待ち中 (pendingCorrection は既に finish 済み) に届いた確定文。
-    // 直接 pendingSourceText に流すと補正 ON のまま無補正で表示されるため、新 worker 起動まで保留する
-    private var pendingFinalTextsAwaitingCorrectionRestart: [(text: String, generation: Int)] = []
+    // 旧 worker の drain 完了 (restart 予約の有無に関わらず) まで、追い越し防止のため直接流さず保留する確定文
+    private var pendingFinalTextsAwaitingCorrectionDrain: [(text: String, generation: Int)] = []
     private var correctionBacklog = 0
     private var segmentThreshold = CaptionPipeline.latinSegmentThreshold
     private var forcedFinalizeInFlight = false
@@ -126,14 +125,15 @@ final class CaptionPipeline {
                         // 補正 worker がいる場合は補正後テキストが表示差し替えと翻訳を担う
                         switch Self.resolveFinalTextRoute(
                             hasPendingCorrection: self.pendingCorrection != nil,
-                            hasPendingCorrectionRestart: self.pendingCorrectionRestart != nil
+                            hasDrainingCorrectionTask: self.correctionTask != nil
                         ) {
                         case .correction:
                             self.correctionBacklog += 1
                             self.pendingCorrection?.yield((text, generation))
-                        case .bufferForCorrectionRestart:
-                            // 旧 worker の drain 完了 (新 worker 起動) まで無補正のまま流さず保留する
-                            self.pendingFinalTextsAwaitingCorrectionRestart.append((text, generation))
+                        case .bufferUntilDrainCompletes:
+                            // 旧 worker の drain 完了まで、無補正のまま流すと補正後テキストを
+                            // 追い越しうるため保留する (restart 予約の有無に関わらず)
+                            self.pendingFinalTextsAwaitingCorrectionDrain.append((text, generation))
                         case .direct:
                             self.pendingSourceText?.yield((text, generation))
                         }
@@ -177,15 +177,15 @@ final class CaptionPipeline {
 
     enum FinalTextRoute: Equatable {
         case correction
-        case bufferForCorrectionRestart
+        case bufferUntilDrainCompletes
         case direct
     }
 
     nonisolated static func resolveFinalTextRoute(
-        hasPendingCorrection: Bool, hasPendingCorrectionRestart: Bool
+        hasPendingCorrection: Bool, hasDrainingCorrectionTask: Bool
     ) -> FinalTextRoute {
         guard !hasPendingCorrection else { return .correction }
-        return hasPendingCorrectionRestart ? .bufferForCorrectionRestart : .direct
+        return hasDrainingCorrectionTask ? .bufferUntilDrainCompletes : .direct
     }
 
     // 稼働中に補正 ON/OFF を切り替える。パイプライン全体を再起動せず補正 worker だけ
@@ -208,12 +208,13 @@ final class CaptionPipeline {
             pendingCorrectionRestart = nil
             pendingCorrection?.finish()
             pendingCorrection = nil
-            // OFF が確定したため、drain 待ち中に保留していた文は無補正のまま流す
-            // (再起動を待って永久に取り残されるのを防ぐ)
-            for item in pendingFinalTextsAwaitingCorrectionRestart {
-                pendingSourceText?.yield(item)
+            // drain 中は完了コールバックが flush するため、drain 中でない場合のみここで flush する
+            if correctionTask == nil {
+                for item in pendingFinalTextsAwaitingCorrectionDrain {
+                    pendingSourceText?.yield(item)
+                }
+                pendingFinalTextsAwaitingCorrectionDrain.removeAll()
             }
-            pendingFinalTextsAwaitingCorrectionRestart.removeAll()
         case .noop:
             break
         }
@@ -396,15 +397,21 @@ final class CaptionPipeline {
             // ループ内の early return でここに来ないため stop() の後始末とは競合しない
             guard let self else { return }
             self.correctionTask = nil
+            let buffered = self.pendingFinalTextsAwaitingCorrectionDrain
+            self.pendingFinalTextsAwaitingCorrectionDrain.removeAll()
             if let pending = self.pendingCorrectionRestart {
                 self.pendingCorrectionRestart = nil
                 self.startCorrectionWorker(inputLocale: pending.inputLocale, vocabulary: pending.vocabulary)
                 // drain 待ち中に保留された確定文を、到着順のまま新 worker に流す
-                let buffered = self.pendingFinalTextsAwaitingCorrectionRestart
-                self.pendingFinalTextsAwaitingCorrectionRestart.removeAll()
                 for item in buffered {
                     self.correctionBacklog += 1
                     self.pendingCorrection?.yield(item)
+                }
+            } else {
+                // restart 予約なし (OFF 確定) の場合、保留文を旧 worker の補正結果より
+                // 先に流さないよう到着順のまま無補正で flush する
+                for item in buffered {
+                    self.pendingSourceText?.yield(item)
                 }
             }
         }
@@ -516,7 +523,7 @@ final class CaptionPipeline {
         correctionTask?.cancel()
         correctionTask = nil
         pendingCorrectionRestart = nil
-        pendingFinalTextsAwaitingCorrectionRestart.removeAll()
+        pendingFinalTextsAwaitingCorrectionDrain.removeAll()
         translationTask?.cancel()
         translationTask = nil
         volatileTranslationTask?.cancel()
