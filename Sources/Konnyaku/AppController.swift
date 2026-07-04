@@ -127,6 +127,20 @@ final class AppController {
         )
     }
 
+    // start() 完了直後に現在の補正/追従訳設定を pipeline へ反映する (start 進行中の
+    // トグル変更を取りこぼさないため)。値が変わっていなければ各 worker 側で no-op
+    private func syncPipelineTogglesWithCurrentSettings() {
+        guard state.isRunning, let pipeline else { return }
+        pipeline.updateCorrectionEnabled(
+            correctionEnabled, inputLocale: languages.inputLocale, vocabulary: VocabularyStore.load())
+        pipeline.updateVolatileTranslationEnabled(
+            realtimeTranslationEnabled,
+            inputLanguage: languages.inputLocale.language,
+            outputLanguage: languages.outputLanguage,
+            lowLatency: activeUseLowLatencyTranslation
+        )
+    }
+
     func editVocabulary() {
         do {
             try VocabularyStore.ensureFileExists()
@@ -326,6 +340,9 @@ final class AppController {
         defer {
             isStarting = false
             isBusy = false
+            // start() 進行中のトグル変更は guard state.isRunning で無視されるため、
+            // start 完了後に現在値へ同期して取りこぼしを防ぐ (未変更なら worker 側で no-op)
+            syncPipelineTogglesWithCurrentSettings()
             consumePendingLanguageRestart()
         }
         state.statusMessage = nil

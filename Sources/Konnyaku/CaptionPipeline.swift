@@ -20,6 +20,9 @@ final class CaptionPipeline {
     private var pendingCorrection: AsyncStream<(text: String, generation: Int)>.Continuation?
     private var pendingSourceText: AsyncStream<(text: String, generation: Int)>.Continuation?
     private var pendingVolatileText: AsyncStream<(text: String, generation: Int)>.Continuation?
+    // OFF→ON 高速切替時の再起動要求。即座に新規起動すると correctionBacklog 等の
+    // 共有状態が二重起動で壊れるため、旧 correctionTask の自然終了を待って適用する
+    private var pendingCorrectionRestart: (inputLocale: Locale, vocabulary: [String])?
     private var correctionBacklog = 0
     private var segmentThreshold = CaptionPipeline.latinSegmentThreshold
     private var forcedFinalizeInFlight = false
@@ -152,10 +155,15 @@ final class CaptionPipeline {
             && inputLocale.language.languageCode == .japanese
         guard shouldRun != (pendingCorrection != nil) else { return }
         if shouldRun {
+            guard correctionTask == nil else {
+                pendingCorrectionRestart = (inputLocale, vocabulary)
+                return
+            }
             startCorrectionWorker(inputLocale: inputLocale, vocabulary: vocabulary)
         } else {
             // backlog を drain してから自然終了させる。hard cancel すると滞留中の文が
             // pendingSourceText に転送されず訳されないまま取り残される
+            pendingCorrectionRestart = nil
             pendingCorrection?.finish()
             pendingCorrection = nil
         }
@@ -173,14 +181,18 @@ final class CaptionPipeline {
         let isActive = volatileTranslationTask != nil || volatileTranslationStartTask != nil
         guard enabled != isActive else { return }
         if enabled {
-            volatileTranslationStartTask = Task { [weak self] in
+            // detached: 呼び出し元 Task のキャンセルを継承すると、resolvePair 待ち中に
+            // 呼び出し元が終了しただけで ON 要求が握り潰され isActive が true のまま残る
+            volatileTranslationStartTask = Task.detached { [weak self] in
                 guard let self else { return }
                 let pair = await TranslationSupport.resolvePair(
                     input: inputLanguage, output: outputLanguage)
-                guard !Task.isCancelled else { return }
-                self.volatileTranslationStartTask = nil
-                self.startVolatileTranslationWorker(
-                    resolvedSource: pair.source, resolvedTarget: pair.target, lowLatency: lowLatency)
+                await MainActor.run {
+                    guard !Task.isCancelled else { return }
+                    self.volatileTranslationStartTask = nil
+                    self.startVolatileTranslationWorker(
+                        resolvedSource: pair.source, resolvedTarget: pair.target, lowLatency: lowLatency)
+                }
             }
         } else {
             volatileTranslationStartTask?.cancel()
@@ -189,6 +201,8 @@ final class CaptionPipeline {
             pendingVolatileText = nil
             volatileTranslationTask?.cancel()
             volatileTranslationTask = nil
+            // worker 停止だけでは表示中の追従訳が残り続けるため明示的にクリアする
+            state.setVolatileTranslation("", generation: state.volatileGeneration)
         }
     }
 
@@ -326,6 +340,14 @@ final class CaptionPipeline {
                 self.state.replaceFinalSource(raw, with: corrected, generation: generation)
                 self.pendingSourceText?.yield((corrected, generation))
             }
+            // stream の自然終了 (finish 経由の drain 完了) 時のみ到達する。キャンセル時は
+            // ループ内の early return でここに来ないため stop() の後始末とは競合しない
+            guard let self else { return }
+            self.correctionTask = nil
+            if let pending = self.pendingCorrectionRestart {
+                self.pendingCorrectionRestart = nil
+                self.startCorrectionWorker(inputLocale: pending.inputLocale, vocabulary: pending.vocabulary)
+            }
         }
     }
 
@@ -374,7 +396,7 @@ final class CaptionPipeline {
                 } catch {
                     guard !(error is CancellationError), !Task.isCancelled else { throw error }
                     debugLog("translate retry after error: \(error)")
-                    try? await Task.sleep(for: .milliseconds(300))
+                    try await Task.sleep(for: .milliseconds(300))
                     return try await session.translate(text)
                 }
             }
@@ -418,6 +440,7 @@ final class CaptionPipeline {
         recognitionTask = nil
         correctionTask?.cancel()
         correctionTask = nil
+        pendingCorrectionRestart = nil
         translationTask?.cancel()
         translationTask = nil
         volatileTranslationTask?.cancel()
