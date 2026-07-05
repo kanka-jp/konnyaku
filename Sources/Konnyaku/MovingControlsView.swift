@@ -13,7 +13,7 @@ struct MovingControlsView: View {
             } label: {
                 Text(t("overlay.done"))
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Self.doneLabelColor)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 5)
                     .background(Color.accentColor, in: Capsule())
@@ -25,5 +25,14 @@ struct MovingControlsView: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
         .background(.black.opacity(0.75), in: Capsule())
+    }
+
+    // システムの prominent ボタンと同じく、明るい accent (yellow 等) では白文字が
+    // 低コントラストになるため輝度でラベル色を切り替える
+    private static var doneLabelColor: Color {
+        let accent = NSColor.controlAccentColor.usingColorSpace(.sRGB) ?? .systemBlue
+        let luminance = 0.299 * accent.redComponent + 0.587 * accent.greenComponent
+            + 0.114 * accent.blueComponent
+        return luminance > 0.65 ? .black : .white
     }
 }
