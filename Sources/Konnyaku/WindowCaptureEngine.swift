@@ -116,11 +116,13 @@ final class WindowCaptureEngine: NSObject {
             sink = nil
             try? await oldStream.stopCapture()
         }
-        // windowID は一覧表示からの経過で消えていることがあるため、開始時点で解決し直す
+        // windowID は一覧表示からの経過で消えていることがあるため、開始時点で解決し直す。
+        // 一覧 (loadShareableWindows) と違い onScreenWindowsOnly: false で引く — 確定までに
+        // 最小化・別 Space へ移動されても選択は有効で、SCK はどちらもキャプチャできる
         let window: SCWindow
         do {
             let content = try await SCShareableContent.excludingDesktopWindows(
-                true, onScreenWindowsOnly: true)
+                true, onScreenWindowsOnly: false)
             guard let found = content.windows.first(where: { $0.windowID == windowID }) else {
                 if generation == captureGeneration {
                     onStopped?(t("shareview.source_ended"))

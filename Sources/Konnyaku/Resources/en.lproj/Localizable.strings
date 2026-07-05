@@ -15,6 +15,7 @@
 "shareview.repick" = "Choose Window…";
 "shareview.select_window" = "Choose a Window to Share";
 "shareview.no_windows" = "No shareable windows found";
+"shareview.load_failed" = "Could not load the window list";
 "shareview.refresh" = "Refresh List";
 "shareview.start_share" = "Start Sharing This Window";
 "shareview.permission_needed" = "The share view needs Screen Recording permission. Allow Konnyaku in System Settings > Privacy & Security > Screen & System Audio Recording, then relaunch the app.";

@@ -15,6 +15,7 @@
 "shareview.repick" = "ウィンドウを選び直す…";
 "shareview.select_window" = "共有するウィンドウを選択";
 "shareview.no_windows" = "共有できるウィンドウが見つかりません";
+"shareview.load_failed" = "ウィンドウ一覧を取得できませんでした";
 "shareview.refresh" = "一覧を更新";
 "shareview.start_share" = "このウィンドウの共有を開始";
 "shareview.permission_needed" = "共有ビューには画面収録の許可が必要です。システム設定 > プライバシーとセキュリティ > 画面とシステムオーディオの収録 で Konnyaku を許可し、アプリを再起動してください。";

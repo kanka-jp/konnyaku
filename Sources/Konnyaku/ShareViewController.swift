@@ -24,13 +24,13 @@ final class ShareViewController: NSObject, NSWindowDelegate {
     func open(state: CaptionState, settings: OverlaySettings, languages: LanguageSettings) {
         deps = (state, settings, languages)
         configureEngineIfNeeded()
-        if WindowCaptureEngine.preflightScreenCaptureAccess() {
-            viewState.needsPermission = false
-        } else {
-            // 未許可なら一度だけシステムダイアログが出る。許可はアプリ再起動後に反映される
-            // ため、本セッション中は許可待ち表示のまま
-            viewState.needsPermission = !WindowCaptureEngine.requestScreenCaptureAccess()
+        if !WindowCaptureEngine.preflightScreenCaptureAccess() {
+            // 未許可なら一度だけシステムダイアログが出る。判定はダイアログの結果でなく
+            // preflight のみで行う (許可はアプリ再起動後に反映されるため、本セッション中は
+            // 許可待ち表示のまま)
+            _ = WindowCaptureEngine.requestScreenCaptureAccess()
         }
+        viewState.needsPermission = !WindowCaptureEngine.preflightScreenCaptureAccess()
         ensureWindow()
         guard !viewState.needsPermission else { return }
         beginSelection()
@@ -61,12 +61,15 @@ final class ShareViewController: NSObject, NSWindowDelegate {
     }
 
     private func reloadWindows() async {
+        viewState.windowListStatus = .loading
         do {
             viewState.windows = try await engine.loadShareableWindows()
+            viewState.windowListStatus = .loaded
             debugLog("shareable windows: \(viewState.windows.count)")
         } catch {
             debugLog("load shareable windows failed: \(error)")
             viewState.windows = []
+            viewState.windowListStatus = .failed
         }
     }
 
@@ -225,8 +228,16 @@ final class ShareViewState {
         case stopped(String)
     }
 
+    // 取得失敗を空一覧 (「見つかりません」) と区別して表示するための状態
+    enum WindowListStatus: Equatable {
+        case loading
+        case loaded
+        case failed
+    }
+
     var phase: Phase = .selecting
     var windows: [WindowCaptureEngine.ShareableWindow] = []
+    var windowListStatus: WindowListStatus = .loading
     var needsPermission = false
 }
 
@@ -320,6 +331,7 @@ struct ShareOverlayView: View {
                 case .selecting:
                     WindowSelectView(
                         windows: viewState.windows,
+                        status: viewState.windowListStatus,
                         onSelect: actions.onSelect,
                         onRefresh: actions.onReselect
                     )
@@ -347,6 +359,7 @@ struct ShareOverlayView: View {
 // 「行クリックで選択 → 開始ボタンで確定」の 2 段階にする
 struct WindowSelectView: View {
     let windows: [WindowCaptureEngine.ShareableWindow]
+    let status: ShareViewState.WindowListStatus
     let onSelect: (WindowCaptureEngine.ShareableWindow) -> Void
     let onRefresh: () -> Void
 
@@ -357,7 +370,14 @@ struct WindowSelectView: View {
             Text(t("shareview.select_window"))
                 .font(.headline)
                 .foregroundStyle(.white)
-            if windows.isEmpty {
+            if status == .loading {
+                ProgressView()
+                    .controlSize(.large)
+                    .frame(maxHeight: .infinity)
+            } else if status == .failed {
+                Text(t("shareview.load_failed"))
+                    .foregroundStyle(.secondary)
+            } else if windows.isEmpty {
                 Text(t("shareview.no_windows"))
                     .foregroundStyle(.secondary)
             } else {
