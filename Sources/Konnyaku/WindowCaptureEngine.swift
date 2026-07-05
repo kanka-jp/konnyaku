@@ -7,6 +7,9 @@ import AVFoundation
 final class WindowCaptureEngine: NSObject {
     var onSelection: ((SCContentFilter) -> Void)?
     var onStopped: ((String) -> Void)?
+    // ピッカー起動失敗はキャプチャ停止と別経路で通知する (稼働中の「共有元を変更…」失敗を
+    // onStopped に流すと、配信継続中なのに停止 UI が重なる矛盾が起きる)
+    var onPickerFailed: ((String) -> Void)?
     // 共有ビュー側で window の縦横比を合わせ直すための通知
     var onSourceSizeChanged: ((CGSize) -> Void)?
 
@@ -20,6 +23,7 @@ final class WindowCaptureEngine: NSObject {
     // 孤児化・現行状態の誤破棄の防止)
     private var captureGeneration = 0
     private var consecutiveConfigUpdateFailures = 0
+    private var configUpdateTask: Task<Void, Never>?
 
     nonisolated static let framesPerSecond: CMTimeScale = 30
     // SCK が受け付ける実用上限で config サイズを抑える (異常値でのストリーム失敗防止)
@@ -116,7 +120,13 @@ final class WindowCaptureEngine: NSObject {
               desired != lastRequestedPixelSize else { return }
         lastRequestedPixelSize = desired
         onSourceSizeChanged?(desired)
-        Task {
+        let previous = configUpdateTask
+        configUpdateTask = Task {
+            // 連続リサイズで複数の更新が並行すると完了順序の逆転で古いサイズが最終適用され
+            // うるため、先行更新を待って直列化し、最新要求でなくなった更新は破棄する
+            await previous?.value
+            guard generation == captureGeneration,
+                  desired == lastRequestedPixelSize else { return }
             do {
                 try await stream.updateConfiguration(Self.makeConfiguration(pixelSize: desired))
                 consecutiveConfigUpdateFailures = 0
@@ -153,20 +163,23 @@ final class WindowCaptureEngine: NSObject {
         ))
     }
 
-    // 上限は縦横比を保って縮める (縦横独立に clamp すると config とコンテンツの縦横比が
-    // ずれ、SCK のアスペクト維持描画で余白が常設化する)
+    // 上限・下限とも縦横比を保って収める (縦横独立に clamp すると config とコンテンツの
+    // 縦横比がずれ、SCK のアスペクト維持描画で余白が常設化する)。縦横比が 64:1 を超える
+    // 病的なウィンドウのみ、上限優先の結果として短辺が下限を割ることを許容する
     nonisolated static func clampedPixelSize(_ size: CGSize) -> CGSize {
-        var width = size.width.rounded()
-        var height = size.height.rounded()
+        var width = max(size.width.rounded(), 1)
+        var height = max(size.height.rounded(), 1)
+        let undershoot = max(minStreamDimension / width, minStreamDimension / height)
+        if undershoot > 1 {
+            width = (width * undershoot).rounded()
+            height = (height * undershoot).rounded()
+        }
         let overshoot = max(width / maxStreamDimension, height / maxStreamDimension)
         if overshoot > 1 {
             width = (width / overshoot).rounded()
             height = (height / overshoot).rounded()
         }
-        return CGSize(
-            width: max(width, minStreamDimension),
-            height: max(height, minStreamDimension)
-        )
+        return CGSize(width: width, height: height)
     }
 
     // SCStream.h の定義: contentRect = surface 内の描画先 (pt)、contentScale = 描画
@@ -207,7 +220,7 @@ extension WindowCaptureEngine: SCContentSharingPickerObserver {
 
     nonisolated func contentSharingPickerStartDidFailWithError(_ error: any Error) {
         Task { @MainActor in
-            self.onStopped?("\(t("shareview.picker_failed")): \(error.localizedDescription)")
+            self.onPickerFailed?("\(t("shareview.picker_failed")): \(error.localizedDescription)")
         }
     }
 }

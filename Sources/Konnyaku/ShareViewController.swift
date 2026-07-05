@@ -38,6 +38,9 @@ final class ShareViewController: NSObject, NSWindowDelegate {
         engine.onStopped = { [weak self] message in
             self?.showStopped(message)
         }
+        engine.onPickerFailed = { [weak self] message in
+            self?.presentAlert(message)
+        }
         engine.onSourceSizeChanged = { [weak self] pixelSize in
             self?.followSourceAspect(pixelSize)
         }
@@ -57,13 +60,17 @@ final class ShareViewController: NSObject, NSWindowDelegate {
         if isOpen {
             viewState.stoppedMessage = message
         } else {
-            // ウィンドウがまだ無い段階の失敗 (ピッカー起動失敗等) は表示先が無いため alert
-            let alert = NSAlert()
-            alert.alertStyle = .warning
-            alert.messageText = message
-            NSApp.activate()
-            alert.runModal()
+            // ウィンドウがまだ無い段階の失敗 (キャプチャ開始失敗等) は表示先が無いため alert
+            presentAlert(message)
         }
+    }
+
+    private func presentAlert(_ message: String) {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = message
+        NSApp.activate()
+        alert.runModal()
     }
 
     private func ensureWindow(sourceSizePoints: CGSize) {
@@ -142,7 +149,15 @@ final class ShareViewController: NSObject, NSWindowDelegate {
         let width = sourceSizePoints.width * scale
         let height = sourceSizePoints.height * scale
         let boost = max(minContentSize.width / width, minContentSize.height / height, 1)
-        return NSSize(width: width * boost, height: height * boost)
+        // 極端な縦長/横長ソースでは最小サイズ充足の拡大が画面を超えるため、画面内に収まる
+        // ことを優先して縦横比を保って縮める (AppKit の contentMinSize 強制で生じうる
+        // letterbox は許容 — 画面外に開いて操作不能になるより良い)
+        let spill = max(
+            width * boost / screenVisibleSize.width,
+            height * boost / screenVisibleSize.height,
+            1
+        )
+        return NSSize(width: width * boost / spill, height: height * boost / spill)
     }
 
     // 現在の幅を保って高さを新縦横比に合わせる (最小サイズを下回る場合は縦横比を
@@ -249,7 +264,8 @@ struct ShareOverlayView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(.black.opacity(0.75))
+                // 半透過だと共有元消滅後も stale frame が Meet 視聴者に透けて見える
+                .background(.black)
             }
         }
     }

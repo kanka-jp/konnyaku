@@ -47,6 +47,17 @@ struct ShareViewControllerTests {
     }
 
     @Test
+    func initialContentSizeFitsExtremePortraitSourceOnScreen() {
+        // 200x2000pt: 最小幅 320 の充足だけだと高さ 3200 で画面外に開く。画面内優先で
+        // 縦横比を保って縮める (0.3 倍 → 60x600 → min boost 5.33 倍 → 320x3200 → 1/3.2)
+        let size = ShareViewController.initialContentSize(
+            sourceSizePoints: CGSize(width: 200, height: 2000),
+            screenVisibleSize: CGSize(width: 1500, height: 1000)
+        )
+        #expect(size == NSSize(width: 100, height: 1000))
+    }
+
+    @Test
     func initialContentSizeFallsBackOnDegenerateInput() {
         let size = ShareViewController.initialContentSize(
             sourceSizePoints: .zero,
@@ -90,6 +101,17 @@ struct WindowCaptureEngineTests {
         #expect(size.width == WindowCaptureEngine.maxStreamDimension)
         // 10000x6000 を長辺 4096 に縮小: 6000 * 4096 / 10000 = 2457.6 → 2458
         #expect(size.height == 2458)
+    }
+
+    @Test
+    func streamPixelSizeBoostsUndersizedWindowPreservingAspectRatio() {
+        // 50x25pt @2x = 100x50px: 下限 64 を独立 clamp すると 100x64 で縦横比が崩れる。
+        // 短辺基準の 1.28 倍で 128x64 になる
+        let size = WindowCaptureEngine.streamPixelSize(
+            contentSizePoints: CGSize(width: 50, height: 25),
+            pointPixelScale: 2
+        )
+        #expect(size == CGSize(width: 128, height: 64))
     }
 
     @Test
