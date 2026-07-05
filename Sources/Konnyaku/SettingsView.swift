@@ -79,20 +79,20 @@ struct SettingsView: View {
 
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
-                        Text(t("settings.overlay_position"))
+                        Text(t("settings.overlay_frame"))
                         Spacer()
                         Button(controller.settings.isMovable
-                            ? t("settings.overlay_position.finish")
-                            : t("settings.overlay_position.adjust")
+                            ? t("settings.overlay_frame.finish")
+                            : t("settings.overlay_frame.adjust")
                         ) {
                             controller.setOverlayMovable(!controller.settings.isMovable)
                         }
-                        Button(t("settings.overlay_position.reset")) {
-                            controller.resetOverlayPosition()
+                        Button(t("settings.overlay_frame.reset")) {
+                            controller.resetOverlayFrame()
                         }
                     }
                     .buttonStyle(.bordered)
-                    Text(t("settings.overlay_position.help"))
+                    Text(t("settings.overlay_frame.help"))
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }

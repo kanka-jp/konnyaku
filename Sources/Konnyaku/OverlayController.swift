@@ -5,8 +5,12 @@ import SwiftUI
 final class OverlayController: NSObject, NSWindowDelegate {
     static let originXKey = "overlay.originX"
     static let originYKey = "overlay.originY"
+    static let widthKey = "overlay.width"
+    static let heightKey = "overlay.height"
 
     private static let margin: CGFloat = 24
+    // 幅は字幕 2 行が読める最低限、高さは panelHeight の minimumHeight と揃える
+    nonisolated static let minPanelSize = NSSize(width: 320, height: 200)
 
     private var panel: NSPanel?
     private var controlsPanel: NSPanel?
@@ -33,11 +37,22 @@ final class OverlayController: NSObject, NSWindowDelegate {
     nonisolated static func resolvedShowFrame(
         fontScale: Double,
         savedOrigin: NSPoint?,
+        savedSize: NSSize?,
         screenFrames: [NSRect],
         mainScreenFrame: NSRect,
         margin: CGFloat
     ) -> NSRect {
+        // ユーザーが調整したサイズは fontScale 由来の自動サイズより優先する。上限は復元先
+        // スクリーン (別モニターへの復元で画面より大きく戻さない)、下限は minPanelSize
+        // (不正な保存値でパネルが見えなくなり復旧手段がリセットしか無くなるのを防ぐ)
         func defaultFrame(on screen: NSRect) -> NSRect {
+            if let savedSize {
+                let size = NSSize(
+                    width: min(max(savedSize.width, minPanelSize.width), screen.width),
+                    height: min(max(savedSize.height, minPanelSize.height), screen.height)
+                )
+                return NSRect(origin: NSPoint(x: screen.minX + margin, y: screen.minY + margin), size: size)
+            }
             let height = panelHeight(fontScale: fontScale, availableHeight: screen.height, margin: margin)
             return NSRect(
                 x: screen.minX + margin,
@@ -52,12 +67,21 @@ final class OverlayController: NSObject, NSWindowDelegate {
         )
         var frame = defaultFrame(on: targetScreen)
 
-        guard let savedOrigin else { return frame }
+        guard let savedOrigin else {
+            // savedSize のみ残存 (部分破損等) の場合、default origin + 画面幅級サイズで
+            // margin 分はみ出しうるため、origin なしの経路でもクランプして返す
+            frame.origin = clampedOrigin(origin: frame.origin, size: frame.size, screenFrame: targetScreen)
+            return frame
+        }
         let candidate = NSRect(origin: savedOrigin, size: frame.size)
         // targetScreen 自体が既に重なっているなら維持する (他のスクリーンも重なる場合に
         // 配列順で無関係な画面へ上書きしてしまうのを防ぐ)。重ならない場合のみ探し直す
         if !targetScreen.intersects(candidate) {
             guard let actualScreen = screenFrames.first(where: { $0.intersects(candidate) }) else {
+                // モニター構成変更等で savedOrigin がどのスクリーンとも重ならない場合の
+                // fallback。savedOrigin nil 経路と同様、画面幅級の savedSize で default
+                // origin のまま返すと margin 分はみ出すためクランプする
+                frame.origin = clampedOrigin(origin: frame.origin, size: frame.size, screenFrame: targetScreen)
                 return frame
             }
             targetScreen = actualScreen
@@ -82,6 +106,7 @@ final class OverlayController: NSObject, NSWindowDelegate {
         let frame = Self.resolvedShowFrame(
             fontScale: settings.fontScale,
             savedOrigin: savedOrigin(),
+            savedSize: savedSize(),
             screenFrames: NSScreen.screens.map(\.visibleFrame),
             mainScreenFrame: mainScreen.visibleFrame,
             margin: Self.margin
@@ -152,16 +177,20 @@ final class OverlayController: NSObject, NSWindowDelegate {
     }
 
     // setFrame が発火させる windowDidMove の再保存を defer の削除で打ち消し、
-    // 未ドラッグの初期状態 (保存 origin なし) に完全に戻す
-    func resetPosition(fontScale: Double) {
+    // 未調整の初期状態 (保存 frame なし) に完全に戻す
+    func resetFrame(fontScale: Double) {
         defer {
-            UserDefaults.standard.removeObject(forKey: Self.originXKey)
-            UserDefaults.standard.removeObject(forKey: Self.originYKey)
+            let defaults = UserDefaults.standard
+            defaults.removeObject(forKey: Self.originXKey)
+            defaults.removeObject(forKey: Self.originYKey)
+            defaults.removeObject(forKey: Self.widthKey)
+            defaults.removeObject(forKey: Self.heightKey)
         }
         guard let panel, let mainScreen = NSScreen.main else { return }
         let frame = Self.resolvedShowFrame(
             fontScale: fontScale,
             savedOrigin: nil,
+            savedSize: nil,
             screenFrames: NSScreen.screens.map(\.visibleFrame),
             mainScreenFrame: mainScreen.visibleFrame,
             margin: Self.margin
@@ -180,6 +209,26 @@ final class OverlayController: NSObject, NSWindowDelegate {
         )
     }
 
+    // サイズを先に画面内へ収めてから origin をクランプする (リサイズ終端とドラッグ中
+    // 移動の共通経路。origin だけのクランプではパネルが画面より大きい場合に収まらない)
+    nonisolated static func clampedFrame(frame: NSRect, screenFrame: NSRect) -> NSRect {
+        var frame = frame
+        frame.size.width = min(frame.width, screenFrame.width)
+        frame.size.height = min(frame.height, screenFrame.height)
+        frame.origin = clampedOrigin(origin: frame.origin, size: frame.size, screenFrame: screenFrame)
+        return frame
+    }
+
+    // ドラッグ中のクランプ先はパネルの現在スクリーンではなくマウス位置のスクリーンにする
+    // (現在スクリーンに閉じ込めるとパネルが境界を越えられず別モニターへ移動できない)。
+    // 内包判定は menu bar / Dock を含む full frame で行う (visibleFrame 基準だと
+    // その帯にマウスがある間どのスクリーンにも属さず、fallback へ引き戻されるため)
+    nonisolated static func dragTargetScreenFrame(
+        mouseLocation: NSPoint, screens: [(frame: NSRect, visibleFrame: NSRect)], fallback: NSRect
+    ) -> NSRect {
+        screens.first(where: { $0.frame.contains(mouseLocation) })?.visibleFrame ?? fallback
+    }
+
     // origin を固定したまま高さだけ伸ばすと fontScale 拡大時にパネル上端が画面外へ
     // 出うるため、clampedOrigin で screenFrame 内に収める
     nonisolated static func resizedFrame(
@@ -195,6 +244,9 @@ final class OverlayController: NSObject, NSWindowDelegate {
     }
 
     func updateFontScale(_ fontScale: Double) {
+        // ユーザーが明示的にサイズ調整済みならその領域を維持し、文字サイズだけ変える
+        // (文字サイズ変更の副作用で調整済み領域が動く驚きを避ける)
+        guard savedSize() == nil else { return }
         guard let panel, let screen = panel.screen ?? NSScreen.main else { return }
         let frame = Self.resizedFrame(
             current: panel.frame,
@@ -206,8 +258,21 @@ final class OverlayController: NSObject, NSWindowDelegate {
     }
 
     func setMovable(_ movable: Bool) {
-        panel?.ignoresMouseEvents = !movable
-        panel?.isMovableByWindowBackground = movable
+        if let panel {
+            // リサイズは調整モード中のみ許可する (通常時は ignoresMouseEvents で操作
+            // 自体が届かないが、styleMask も揃えて契約を明示する)
+            if movable {
+                panel.styleMask.insert(.resizable)
+                panel.minSize = Self.minPanelSize
+                if let screen = panel.screen ?? NSScreen.main {
+                    panel.maxSize = screen.visibleFrame.size
+                }
+            } else {
+                panel.styleMask.remove(.resizable)
+            }
+            panel.ignoresMouseEvents = !movable
+            panel.isMovableByWindowBackground = movable
+        }
         if movable {
             showControlsPanel()
         } else {
@@ -217,8 +282,52 @@ final class OverlayController: NSObject, NSWindowDelegate {
 
     func windowDidMove(_ notification: Notification) {
         guard let panel else { return }
-        UserDefaults.standard.set(Double(panel.frame.origin.x), forKey: Self.originXKey)
-        UserDefaults.standard.set(Double(panel.frame.origin.y), forKey: Self.originYKey)
+        // ライブドラッグは AppKit が画面外への持ち出しを制約しないため、移動のたびに
+        // frame 全体を画面内へ引き戻す (パネルが画面より大きい場合はサイズも縮める)。
+        // 本通知は setFrame 等のプログラム的な移動でも発火し、そのときのマウス位置は
+        // 無関係なスクリーンにありうるため、クランプは実ドラッグ中 (調整モード + 左
+        // ボタン押下) に限定する。リサイズ中は origin だけ動かすと反対側の辺がずれる
+        // ため終端のクランプに任せる
+        if !panel.inLiveResize,
+            panel.isMovableByWindowBackground,
+            NSEvent.pressedMouseButtons & 1 != 0
+        {
+            let fallback = (panel.screen ?? NSScreen.main)?.visibleFrame ?? .zero
+            let target = Self.dragTargetScreenFrame(
+                mouseLocation: NSEvent.mouseLocation,
+                screens: NSScreen.screens.map { ($0.frame, $0.visibleFrame) },
+                fallback: fallback
+            )
+            if !target.isEmpty {
+                // リサイズ上限を調整開始時のスクリーンで固定せずドラッグ先へ追従させる
+                panel.maxSize = target.size
+                let clamped = Self.clampedFrame(frame: panel.frame, screenFrame: target)
+                if clamped != panel.frame {
+                    panel.setFrame(clamped, display: true)
+                }
+            }
+        }
+        // リサイズ中は保存しない (origin だけ先に保存すると、リサイズ完了前の異常終了で
+        // 旧 size と不整合な組で復元されるため、windowDidEndLiveResize の一括保存に任せる)
+        if !panel.inLiveResize {
+            UserDefaults.standard.set(Double(panel.frame.origin.x), forKey: Self.originXKey)
+            UserDefaults.standard.set(Double(panel.frame.origin.y), forKey: Self.originYKey)
+        }
+    }
+
+    func windowDidEndLiveResize(_ notification: Notification) {
+        guard let panel else { return }
+        if let screen = panel.screen ?? NSScreen.main {
+            let clamped = Self.clampedFrame(frame: panel.frame, screenFrame: screen.visibleFrame)
+            if clamped != panel.frame {
+                panel.setFrame(clamped, display: true)
+            }
+        }
+        let defaults = UserDefaults.standard
+        defaults.set(Double(panel.frame.origin.x), forKey: Self.originXKey)
+        defaults.set(Double(panel.frame.origin.y), forKey: Self.originYKey)
+        defaults.set(Double(panel.frame.width), forKey: Self.widthKey)
+        defaults.set(Double(panel.frame.height), forKey: Self.heightKey)
     }
 
     private func savedOrigin() -> NSPoint? {
@@ -230,6 +339,18 @@ final class OverlayController: NSObject, NSWindowDelegate {
         return NSPoint(
             x: defaults.double(forKey: Self.originXKey),
             y: defaults.double(forKey: Self.originYKey)
+        )
+    }
+
+    private func savedSize() -> NSSize? {
+        let defaults = UserDefaults.standard
+        guard defaults.object(forKey: Self.widthKey) != nil,
+              defaults.object(forKey: Self.heightKey) != nil else {
+            return nil
+        }
+        return NSSize(
+            width: defaults.double(forKey: Self.widthKey),
+            height: defaults.double(forKey: Self.heightKey)
         )
     }
 }

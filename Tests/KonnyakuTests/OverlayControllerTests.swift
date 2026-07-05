@@ -100,7 +100,7 @@ struct OverlayControllerTests {
     func resolvedShowFrameUsesMainScreenDefaultWhenNoSavedOrigin() {
         let main = NSRect(x: 0, y: 0, width: 1000, height: 800)
         let frame = OverlayController.resolvedShowFrame(
-            fontScale: 1.0, savedOrigin: nil, screenFrames: [main], mainScreenFrame: main, margin: 24
+            fontScale: 1.0, savedOrigin: nil, savedSize: nil, screenFrames: [main], mainScreenFrame: main, margin: 24
         )
         #expect(frame == NSRect(x: 24, y: 24, width: 952, height: 380))
     }
@@ -109,7 +109,7 @@ struct OverlayControllerTests {
     func resolvedShowFrameFallsBackToMainDefaultWhenOriginAndFrameMatchNoScreen() {
         let main = NSRect(x: 0, y: 0, width: 1000, height: 800)
         let frame = OverlayController.resolvedShowFrame(
-            fontScale: 1.0, savedOrigin: NSPoint(x: 5000, y: 5000), screenFrames: [main], mainScreenFrame: main, margin: 24
+            fontScale: 1.0, savedOrigin: NSPoint(x: 5000, y: 5000), savedSize: nil, screenFrames: [main], mainScreenFrame: main, margin: 24
         )
         #expect(frame.origin == NSPoint(x: 24, y: 24))
     }
@@ -118,7 +118,7 @@ struct OverlayControllerTests {
     func resolvedShowFrameClampsLargeHorizontalDragInsteadOfResettingToDefault() {
         let main = NSRect(x: 0, y: 0, width: 1000, height: 800)
         let frame = OverlayController.resolvedShowFrame(
-            fontScale: 1.0, savedOrigin: NSPoint(x: 100, y: 24), screenFrames: [main], mainScreenFrame: main, margin: 24
+            fontScale: 1.0, savedOrigin: NSPoint(x: 100, y: 24), savedSize: nil, screenFrames: [main], mainScreenFrame: main, margin: 24
         )
         #expect(frame.origin == NSPoint(x: 48, y: 24))
     }
@@ -127,7 +127,7 @@ struct OverlayControllerTests {
     func resolvedShowFrameClampsLeftwardDragInsteadOfResettingToDefault() {
         let main = NSRect(x: 0, y: 0, width: 1000, height: 800)
         let frame = OverlayController.resolvedShowFrame(
-            fontScale: 1.0, savedOrigin: NSPoint(x: -10, y: 24), screenFrames: [main], mainScreenFrame: main, margin: 24
+            fontScale: 1.0, savedOrigin: NSPoint(x: -10, y: 24), savedSize: nil, screenFrames: [main], mainScreenFrame: main, margin: 24
         )
         #expect(frame.origin == NSPoint(x: 0, y: 24))
     }
@@ -137,7 +137,7 @@ struct OverlayControllerTests {
         let main = NSRect(x: 0, y: 0, width: 1000, height: 800)
         let secondary = NSRect(x: 1000, y: 0, width: 600, height: 400)
         let frame = OverlayController.resolvedShowFrame(
-            fontScale: 2.0, savedOrigin: NSPoint(x: 1200, y: 100), screenFrames: [main, secondary],
+            fontScale: 2.0, savedOrigin: NSPoint(x: 1200, y: 100), savedSize: nil, screenFrames: [main, secondary],
             mainScreenFrame: main, margin: 24
         )
         let expectedHeight = OverlayController.panelHeight(fontScale: 2.0, availableHeight: 400, margin: 24)
@@ -151,7 +151,7 @@ struct OverlayControllerTests {
         let main = NSRect(x: 0, y: 0, width: 1000, height: 800)
         let secondary = NSRect(x: 1200, y: 0, width: 600, height: 1200)
         let frame = OverlayController.resolvedShowFrame(
-            fontScale: 1.0, savedOrigin: NSPoint(x: 1050, y: 100), screenFrames: [main, secondary],
+            fontScale: 1.0, savedOrigin: NSPoint(x: 1050, y: 100), savedSize: nil, screenFrames: [main, secondary],
             mainScreenFrame: main, margin: 24
         )
         let expectedHeight = OverlayController.panelHeight(fontScale: 1.0, availableHeight: 1200, margin: 24)
@@ -167,7 +167,7 @@ struct OverlayControllerTests {
         let secondary = NSRect(x: 0, y: 0, width: 1000, height: 800)
         let main = NSRect(x: 0, y: 800, width: 1000, height: 1000)
         let frame = OverlayController.resolvedShowFrame(
-            fontScale: 2.0, savedOrigin: NSPoint(x: 100, y: 50), screenFrames: [main, secondary],
+            fontScale: 2.0, savedOrigin: NSPoint(x: 100, y: 50), savedSize: nil, screenFrames: [main, secondary],
             mainScreenFrame: main, margin: 24
         )
         let expectedHeight = OverlayController.panelHeight(fontScale: 2.0, availableHeight: secondary.height, margin: 24)
@@ -204,21 +204,152 @@ struct OverlayControllerTests {
         #expect(target == main)
     }
 
-    // resetPosition の契約はパネル非表示でも保存 origin を消すこと (defer が guard より先に登録される)。
-    // defer の削除や guard 後への移動で「初期位置に戻す」が silent no-op になる regression を防ぐ
+    // resetFrame の契約はパネル非表示でも保存 origin/size を消すこと (defer が guard より先に登録される)。
+    // defer の削除や guard 後への移動で「初期状態に戻す」が silent no-op になる regression を防ぐ
     @Test @MainActor
-    func resetPositionClearsSavedOriginEvenWithoutPanel() {
+    func resetFrameClearsSavedFrameEvenWithoutPanel() {
         let defaults = UserDefaults.standard
         defaults.set(123.0, forKey: OverlayController.originXKey)
         defaults.set(45.0, forKey: OverlayController.originYKey)
+        defaults.set(600.0, forKey: OverlayController.widthKey)
+        defaults.set(300.0, forKey: OverlayController.heightKey)
         defer {
             defaults.removeObject(forKey: OverlayController.originXKey)
             defaults.removeObject(forKey: OverlayController.originYKey)
+            defaults.removeObject(forKey: OverlayController.widthKey)
+            defaults.removeObject(forKey: OverlayController.heightKey)
         }
 
-        OverlayController().resetPosition(fontScale: 1.0)
+        OverlayController().resetFrame(fontScale: 1.0)
 
         #expect(defaults.object(forKey: OverlayController.originXKey) == nil)
         #expect(defaults.object(forKey: OverlayController.originYKey) == nil)
+        #expect(defaults.object(forKey: OverlayController.widthKey) == nil)
+        #expect(defaults.object(forKey: OverlayController.heightKey) == nil)
+    }
+
+    // ユーザーが調整したサイズは fontScale 由来の自動サイズより優先する契約。
+    // 落ちる場合は再起動・再表示でユーザーのリサイズ結果が失われている
+    @Test
+    func resolvedShowFrameUsesSavedSizeOverFontScaleDefault() {
+        let main = NSRect(x: 0, y: 0, width: 1000, height: 800)
+        let frame = OverlayController.resolvedShowFrame(
+            fontScale: 2.0, savedOrigin: NSPoint(x: 100, y: 50), savedSize: NSSize(width: 600, height: 300),
+            screenFrames: [main], mainScreenFrame: main, margin: 24
+        )
+        #expect(frame.size == NSSize(width: 600, height: 300))
+        #expect(frame.origin == NSPoint(x: 100, y: 50))
+    }
+
+    // 大きいモニターで保存したサイズを小さいモニターへ復元するケース。画面より大きい
+    // まま復元すると本 PR が直す「見切れ」が復元経路で再発する
+    @Test
+    func resolvedShowFrameClampsSavedSizeToTargetScreen() {
+        let main = NSRect(x: 0, y: 0, width: 1000, height: 800)
+        let secondary = NSRect(x: 1000, y: 0, width: 600, height: 400)
+        let frame = OverlayController.resolvedShowFrame(
+            fontScale: 1.0, savedOrigin: NSPoint(x: 1100, y: 100), savedSize: NSSize(width: 900, height: 700),
+            screenFrames: [main, secondary], mainScreenFrame: main, margin: 24
+        )
+        #expect(frame.width <= secondary.width)
+        #expect(frame.height <= secondary.height)
+        #expect(frame.minX >= secondary.minX)
+        #expect(frame.maxX <= secondary.maxX)
+    }
+
+    // 不正な保存値 (0 等) をそのまま使うとパネルが不可視になり、復旧手段がリセットしか
+    // 無くなる。minPanelSize を下限として復元する契約
+    @Test
+    func resolvedShowFrameEnforcesMinimumSizeForCorruptedSavedSize() {
+        let main = NSRect(x: 0, y: 0, width: 1000, height: 800)
+        let frame = OverlayController.resolvedShowFrame(
+            fontScale: 1.0, savedOrigin: NSPoint(x: 24, y: 24), savedSize: NSSize(width: 0, height: 0),
+            screenFrames: [main], mainScreenFrame: main, margin: 24
+        )
+        #expect(frame.size == OverlayController.minPanelSize)
+    }
+
+    // windowDidEndLiveResize の経路。リサイズで画面からはみ出た frame はサイズ縮小 →
+    // origin 引き戻しの順で画面内へ収める (origin だけのクランプでは収まらない)
+    @Test
+    func clampedFrameShrinksOversizeThenPullsOriginBack() {
+        let screen = NSRect(x: 0, y: 0, width: 1000, height: 800)
+        let clamped = OverlayController.clampedFrame(
+            frame: NSRect(x: 700, y: 600, width: 1200, height: 900), screenFrame: screen
+        )
+        #expect(clamped == NSRect(x: 0, y: 0, width: 1000, height: 800))
+    }
+
+    @Test
+    func clampedFrameKeepsInBoundsFrameUnchanged() {
+        let screen = NSRect(x: 0, y: 0, width: 1000, height: 800)
+        let frame = NSRect(x: 100, y: 100, width: 600, height: 300)
+        #expect(OverlayController.clampedFrame(frame: frame, screenFrame: screen) == frame)
+    }
+
+    // ドラッグ中のクランプ先選定。パネルの現在スクリーン基準だと境界を越えられず
+    // 別モニターへ移動できなくなる (クランプ導入によるマルチモニター regression 防止)
+    @Test
+    func dragTargetScreenFramePicksScreenContainingMouse() {
+        let main = NSRect(x: 0, y: 0, width: 1000, height: 800)
+        let secondary = NSRect(x: 1000, y: 0, width: 600, height: 400)
+        let target = OverlayController.dragTargetScreenFrame(
+            mouseLocation: NSPoint(x: 1100, y: 100),
+            screens: [(main, main), (secondary, secondary)], fallback: main
+        )
+        #expect(target == secondary)
+    }
+
+    @Test
+    func dragTargetScreenFrameFallsBackWhenMouseMatchesNoScreen() {
+        let main = NSRect(x: 0, y: 0, width: 1000, height: 800)
+        let target = OverlayController.dragTargetScreenFrame(
+            mouseLocation: NSPoint(x: 5000, y: 5000), screens: [(main, main)], fallback: main
+        )
+        #expect(target == main)
+    }
+
+    // 内包判定が visibleFrame 基準だと menu bar / Dock 帯のマウスがどのスクリーンにも
+    // 属さず fallback へ吸われ、別モニターへのドラッグが上端付近で妨げられる regression を防ぐ
+    @Test
+    func dragTargetScreenFramePicksScreenWhenMouseInMenuBarArea() {
+        let mainFrame = NSRect(x: 0, y: 0, width: 1000, height: 800)
+        let mainVisible = NSRect(x: 0, y: 0, width: 1000, height: 775)
+        let secondaryFrame = NSRect(x: 1000, y: 0, width: 600, height: 500)
+        let secondaryVisible = NSRect(x: 1000, y: 0, width: 600, height: 475)
+        let target = OverlayController.dragTargetScreenFrame(
+            mouseLocation: NSPoint(x: 1100, y: 490),
+            screens: [(mainFrame, mainVisible), (secondaryFrame, secondaryVisible)],
+            fallback: mainVisible
+        )
+        #expect(target == secondaryVisible)
+    }
+
+    // stale savedOrigin (どのスクリーンとも intersects しない) + 画面幅級 savedSize の
+    // fallback 復元経路。unclamped な default frame を返すと margin 分はみ出す regression を防ぐ
+    @Test
+    func resolvedShowFrameClampsOversizedSavedSizeWhenOriginMatchesNoScreen() {
+        let main = NSRect(x: 0, y: 0, width: 1000, height: 800)
+        let frame = OverlayController.resolvedShowFrame(
+            fontScale: 1.0, savedOrigin: NSPoint(x: 5000, y: 5000), savedSize: NSSize(width: 990, height: 790),
+            screenFrames: [main], mainScreenFrame: main, margin: 24
+        )
+        #expect(frame.maxX <= main.maxX)
+        #expect(frame.maxY <= main.maxY)
+        #expect(frame.size == NSSize(width: 990, height: 790))
+    }
+
+    // savedOrigin なし + 画面幅級の savedSize (部分破損等) の復元経路。default origin
+    // (margin, margin) のまま返すと margin 分はみ出す regression を防ぐ
+    @Test
+    func resolvedShowFrameClampsOversizedSavedSizeWithoutSavedOrigin() {
+        let main = NSRect(x: 0, y: 0, width: 1000, height: 800)
+        let frame = OverlayController.resolvedShowFrame(
+            fontScale: 1.0, savedOrigin: nil, savedSize: NSSize(width: 990, height: 790),
+            screenFrames: [main], mainScreenFrame: main, margin: 24
+        )
+        #expect(frame.maxX <= main.maxX)
+        #expect(frame.maxY <= main.maxY)
+        #expect(frame.size == NSSize(width: 990, height: 790))
     }
 }
