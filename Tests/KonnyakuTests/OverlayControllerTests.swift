@@ -204,6 +204,25 @@ struct OverlayControllerTests {
         #expect(target == main)
     }
 
+    // 調整モード外で key を許可すると、字幕表示中に他アプリのキーボードフォーカスを
+    // 奪う (nonactivating panel は key になるとアプリ非 activate のまま入力を受ける)。
+    // default false と toggle の往復を契約として固定する
+    @Test @MainActor
+    func adjustablePanelBecomesKeyOnlyWhileAdjusting() {
+        let panel = AdjustablePanel(
+            contentRect: NSRect(x: 0, y: 0, width: 100, height: 100),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        panel.isReleasedWhenClosed = false
+        #expect(!panel.canBecomeKey)
+        panel.allowsKeyWhileAdjusting = true
+        #expect(panel.canBecomeKey)
+        panel.allowsKeyWhileAdjusting = false
+        #expect(!panel.canBecomeKey)
+    }
+
     // resetFrame の契約はパネル非表示でも保存 origin/size を消すこと (defer が guard より先に登録される)。
     // defer の削除や guard 後への移動で「初期状態に戻す」が silent no-op になる regression を防ぐ
     @Test @MainActor
