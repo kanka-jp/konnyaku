@@ -30,6 +30,39 @@ struct ShareViewControllerTests {
             screenVisibleSize: CGSize(width: 1500, height: 1000))
         #expect(size == NSSize(width: 100, height: 1000))
     }
+
+    @Test
+    func followedContentSizeAddsBandHeightToVideoAspect() {
+        // band 配置: 高さ = 映像部 (幅 × 縦横比) + 帯の固定高
+        let size = ShareViewController.followedContentSize(
+            currentWidth: 800, sourceSize: CGSize(width: 1600, height: 1000),
+            screenVisibleSize: CGSize(width: 1500, height: 1000), extraHeight: 160)
+        #expect(size == NSSize(width: 800, height: 660))
+    }
+
+    @Test
+    func followedContentSizeMinHeightBoostAccountsForBandHeight() {
+        // 帯込みで 80 + 60 = 140 < 180 のため、映像部のみを拡大して最小高を満たす
+        let size = ShareViewController.followedContentSize(
+            currentWidth: 320, sourceSize: CGSize(width: 4000, height: 1000),
+            screenVisibleSize: CGSize(width: 1500, height: 1000), extraHeight: 60)
+        #expect(size == NSSize(width: 480, height: 180))
+    }
+
+    @Test
+    func followedContentSizeScreenClampAccountsForBandHeight() {
+        // 帯込みの合計高が画面に収まるよう映像部を縮める: (1000-160)/10 = 84
+        let size = ShareViewController.followedContentSize(
+            currentWidth: 320, sourceSize: CGSize(width: 200, height: 2000),
+            screenVisibleSize: CGSize(width: 1500, height: 1000), extraHeight: 160)
+        #expect(size == NSSize(width: 84, height: 1000))
+    }
+
+    @Test
+    func bandHeightScalesWithFontScale() {
+        #expect(ShareViewController.bandHeight(fontScale: 1.0) == 160)
+        #expect(ShareViewController.bandHeight(fontScale: 2.0) == 320)
+    }
 }
 
 struct WindowCaptureEngineTests {
