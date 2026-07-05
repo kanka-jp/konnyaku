@@ -294,7 +294,8 @@ struct OverlayControllerTests {
         let main = NSRect(x: 0, y: 0, width: 1000, height: 800)
         let secondary = NSRect(x: 1000, y: 0, width: 600, height: 400)
         let target = OverlayController.dragTargetScreenFrame(
-            mouseLocation: NSPoint(x: 1100, y: 100), screenFrames: [main, secondary], fallback: main
+            mouseLocation: NSPoint(x: 1100, y: 100),
+            screens: [(main, main), (secondary, secondary)], fallback: main
         )
         #expect(target == secondary)
     }
@@ -303,8 +304,38 @@ struct OverlayControllerTests {
     func dragTargetScreenFrameFallsBackWhenMouseMatchesNoScreen() {
         let main = NSRect(x: 0, y: 0, width: 1000, height: 800)
         let target = OverlayController.dragTargetScreenFrame(
-            mouseLocation: NSPoint(x: 5000, y: 5000), screenFrames: [main], fallback: main
+            mouseLocation: NSPoint(x: 5000, y: 5000), screens: [(main, main)], fallback: main
         )
         #expect(target == main)
+    }
+
+    // 内包判定が visibleFrame 基準だと menu bar / Dock 帯のマウスがどのスクリーンにも
+    // 属さず fallback へ吸われ、別モニターへのドラッグが上端付近で妨げられる regression を防ぐ
+    @Test
+    func dragTargetScreenFramePicksScreenWhenMouseInMenuBarArea() {
+        let mainFrame = NSRect(x: 0, y: 0, width: 1000, height: 800)
+        let mainVisible = NSRect(x: 0, y: 0, width: 1000, height: 775)
+        let secondaryFrame = NSRect(x: 1000, y: 0, width: 600, height: 500)
+        let secondaryVisible = NSRect(x: 1000, y: 0, width: 600, height: 475)
+        let target = OverlayController.dragTargetScreenFrame(
+            mouseLocation: NSPoint(x: 1100, y: 490),
+            screens: [(mainFrame, mainVisible), (secondaryFrame, secondaryVisible)],
+            fallback: mainVisible
+        )
+        #expect(target == secondaryVisible)
+    }
+
+    // savedOrigin なし + 画面幅級の savedSize (部分破損等) の復元経路。default origin
+    // (margin, margin) のまま返すと margin 分はみ出す regression を防ぐ
+    @Test
+    func resolvedShowFrameClampsOversizedSavedSizeWithoutSavedOrigin() {
+        let main = NSRect(x: 0, y: 0, width: 1000, height: 800)
+        let frame = OverlayController.resolvedShowFrame(
+            fontScale: 1.0, savedOrigin: nil, savedSize: NSSize(width: 990, height: 790),
+            screenFrames: [main], mainScreenFrame: main, margin: 24
+        )
+        #expect(frame.maxX <= main.maxX)
+        #expect(frame.maxY <= main.maxY)
+        #expect(frame.size == NSSize(width: 990, height: 790))
     }
 }

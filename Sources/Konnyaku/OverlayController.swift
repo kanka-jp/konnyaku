@@ -67,7 +67,12 @@ final class OverlayController: NSObject, NSWindowDelegate {
         )
         var frame = defaultFrame(on: targetScreen)
 
-        guard let savedOrigin else { return frame }
+        guard let savedOrigin else {
+            // savedSize のみ残存 (部分破損等) の場合、default origin + 画面幅級サイズで
+            // margin 分はみ出しうるため、origin なしの経路でもクランプして返す
+            frame.origin = clampedOrigin(origin: frame.origin, size: frame.size, screenFrame: targetScreen)
+            return frame
+        }
         let candidate = NSRect(origin: savedOrigin, size: frame.size)
         // targetScreen 自体が既に重なっているなら維持する (他のスクリーンも重なる場合に
         // 配列順で無関係な画面へ上書きしてしまうのを防ぐ)。重ならない場合のみ探し直す
@@ -211,11 +216,13 @@ final class OverlayController: NSObject, NSWindowDelegate {
     }
 
     // ドラッグ中のクランプ先はパネルの現在スクリーンではなくマウス位置のスクリーンにする
-    // (現在スクリーンに閉じ込めるとパネルが境界を越えられず別モニターへ移動できない)
+    // (現在スクリーンに閉じ込めるとパネルが境界を越えられず別モニターへ移動できない)。
+    // 内包判定は menu bar / Dock を含む full frame で行う (visibleFrame 基準だと
+    // その帯にマウスがある間どのスクリーンにも属さず、fallback へ引き戻されるため)
     nonisolated static func dragTargetScreenFrame(
-        mouseLocation: NSPoint, screenFrames: [NSRect], fallback: NSRect
+        mouseLocation: NSPoint, screens: [(frame: NSRect, visibleFrame: NSRect)], fallback: NSRect
     ) -> NSRect {
-        screenFrames.first(where: { $0.contains(mouseLocation) }) ?? fallback
+        screens.first(where: { $0.frame.contains(mouseLocation) })?.visibleFrame ?? fallback
     }
 
     // origin を固定したまま高さだけ伸ばすと fontScale 拡大時にパネル上端が画面外へ
@@ -272,26 +279,36 @@ final class OverlayController: NSObject, NSWindowDelegate {
     func windowDidMove(_ notification: Notification) {
         guard let panel else { return }
         // ライブドラッグは AppKit が画面外への持ち出しを制約しないため、移動のたびに
-        // 画面内へ引き戻す (字幕が途中までしか見えない位置に置けてしまうのを防ぐ)。
-        // 左端リサイズ中も origin が動いて本通知が来るが、origin だけ動かすと
-        // 反対側の辺がずれるためリサイズ中はスキップし、終端のクランプに任せる
-        if !panel.inLiveResize {
+        // frame 全体を画面内へ引き戻す (パネルが画面より大きい場合はサイズも縮める)。
+        // 本通知は setFrame 等のプログラム的な移動でも発火し、そのときのマウス位置は
+        // 無関係なスクリーンにありうるため、クランプは実ドラッグ中 (調整モード + 左
+        // ボタン押下) に限定する。リサイズ中は origin だけ動かすと反対側の辺がずれる
+        // ため終端のクランプに任せる
+        if !panel.inLiveResize,
+            panel.isMovableByWindowBackground,
+            NSEvent.pressedMouseButtons & 1 != 0
+        {
             let fallback = (panel.screen ?? NSScreen.main)?.visibleFrame ?? .zero
             let target = Self.dragTargetScreenFrame(
                 mouseLocation: NSEvent.mouseLocation,
-                screenFrames: NSScreen.screens.map(\.visibleFrame),
+                screens: NSScreen.screens.map { ($0.frame, $0.visibleFrame) },
                 fallback: fallback
             )
             if !target.isEmpty {
-                let clamped = Self.clampedOrigin(
-                    origin: panel.frame.origin, size: panel.frame.size, screenFrame: target)
-                if clamped != panel.frame.origin {
-                    panel.setFrameOrigin(clamped)
+                // リサイズ上限を調整開始時のスクリーンで固定せずドラッグ先へ追従させる
+                panel.maxSize = target.size
+                let clamped = Self.clampedFrame(frame: panel.frame, screenFrame: target)
+                if clamped != panel.frame {
+                    panel.setFrame(clamped, display: true)
                 }
             }
         }
-        UserDefaults.standard.set(Double(panel.frame.origin.x), forKey: Self.originXKey)
-        UserDefaults.standard.set(Double(panel.frame.origin.y), forKey: Self.originYKey)
+        // リサイズ中は保存しない (origin だけ先に保存すると、リサイズ完了前の異常終了で
+        // 旧 size と不整合な組で復元されるため、windowDidEndLiveResize の一括保存に任せる)
+        if !panel.inLiveResize {
+            UserDefaults.standard.set(Double(panel.frame.origin.x), forKey: Self.originXKey)
+            UserDefaults.standard.set(Double(panel.frame.origin.y), forKey: Self.originYKey)
+        }
     }
 
     func windowDidEndLiveResize(_ notification: Notification) {
