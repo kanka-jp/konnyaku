@@ -69,7 +69,8 @@ struct ShareViewControllerTests {
     @Test
     func followedContentSizeKeepsWidthAndAdjustsHeightToNewAspect() {
         let size = ShareViewController.followedContentSize(
-            currentWidth: 800, sourceSize: CGSize(width: 1600, height: 1000))
+            currentWidth: 800, sourceSize: CGSize(width: 1600, height: 1000),
+            screenVisibleSize: CGSize(width: 1500, height: 1000))
         #expect(size == NSSize(width: 800, height: 500))
     }
 
@@ -77,8 +78,18 @@ struct ShareViewControllerTests {
     func followedContentSizeEnforcesMinHeightPreservingAspect() {
         // 幅 400 のまま高さを 4:1 に合わせると 100 < 180 のため、縦横比を保って両辺拡大
         let size = ShareViewController.followedContentSize(
-            currentWidth: 400, sourceSize: CGSize(width: 4000, height: 1000))
+            currentWidth: 400, sourceSize: CGSize(width: 4000, height: 1000),
+            screenVisibleSize: CGSize(width: 1500, height: 1000))
         #expect(size == NSSize(width: 720, height: 180))
+    }
+
+    @Test
+    func followedContentSizeFitsExtremePortraitAspectOnScreen() {
+        // 幅 320 のまま 1:10 に合わせると高さ 3200 で画面外のため、画面内優先で縮める
+        let size = ShareViewController.followedContentSize(
+            currentWidth: 320, sourceSize: CGSize(width: 200, height: 2000),
+            screenVisibleSize: CGSize(width: 1500, height: 1000))
+        #expect(size == NSSize(width: 100, height: 1000))
     }
 }
 

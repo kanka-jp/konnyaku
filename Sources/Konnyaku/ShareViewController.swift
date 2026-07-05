@@ -75,7 +75,9 @@ final class ShareViewController: NSObject, NSWindowDelegate {
 
     private func ensureWindow(sourceSizePoints: CGSize) {
         if let window {
-            window.contentAspectRatio = sourceSizePoints
+            // 再選択では新 stream のバッファが最初から新ソースサイズで作られ、リサイズ
+            // 追従経路が発火しないため、ここで現フレームを新縦横比へ合わせ直す
+            followSourceAspect(sourceSizePoints)
             window.makeKeyAndOrderFront(nil)
             NSApp.activate()
             return
@@ -115,13 +117,19 @@ final class ShareViewController: NSObject, NSWindowDelegate {
     }
 
     // contentAspectRatio はユーザーリサイズの制約のみで現フレームを変えないため、
-    // それだけでは共有元の縦横比変化後に letterbox が Meet 配信へ残り続ける
-    private func followSourceAspect(_ sourcePixelSize: CGSize) {
+    // それだけでは共有元の縦横比変化後に letterbox が Meet 配信へ残り続ける。
+    // sourceSize は縦横比のみ使うため pt / px どちらの単位でもよい
+    private func followSourceAspect(_ sourceSize: CGSize) {
         guard let window else { return }
-        window.contentAspectRatio = sourcePixelSize
+        window.contentAspectRatio = sourceSize
         let currentWidth = window.contentRect(forFrameRect: window.frame).width
         window.setContentSize(
-            Self.followedContentSize(currentWidth: currentWidth, sourceSize: sourcePixelSize))
+            Self.followedContentSize(
+                currentWidth: currentWidth,
+                sourceSize: sourceSize,
+                screenVisibleSize: (window.screen ?? NSScreen.main)?.visibleFrame.size
+                    ?? NSSize(width: 1280, height: 800)
+            ))
     }
 
     func windowWillClose(_ notification: Notification) {
@@ -161,14 +169,23 @@ final class ShareViewController: NSObject, NSWindowDelegate {
     }
 
     // 現在の幅を保って高さを新縦横比に合わせる (最小サイズを下回る場合は縦横比を
-    // 保ったまま両辺を拡大する)
-    nonisolated static func followedContentSize(currentWidth: CGFloat, sourceSize: CGSize) -> NSSize {
+    // 保ったまま両辺を拡大し、画面を超える場合は initialContentSize と同じく画面内を
+    // 優先して縮める — ライブ共有中に画面外へ飛び出すのを防ぐ)
+    nonisolated static func followedContentSize(
+        currentWidth: CGFloat, sourceSize: CGSize, screenVisibleSize: CGSize
+    ) -> NSSize {
         guard sourceSize.width > 1, sourceSize.height > 1 else { return minContentSize }
         let aspect = sourceSize.height / sourceSize.width
-        let width = max(currentWidth, minContentSize.width)
-        let height = width * aspect
+        var width = max(currentWidth, minContentSize.width)
+        var height = width * aspect
         let boost = max(minContentSize.height / height, 1)
-        return NSSize(width: width * boost, height: height * boost)
+        width *= boost
+        height *= boost
+        guard screenVisibleSize.width > 1, screenVisibleSize.height > 1 else {
+            return NSSize(width: width, height: height)
+        }
+        let spill = max(width / screenVisibleSize.width, height / screenVisibleSize.height, 1)
+        return NSSize(width: width / spill, height: height / spill)
     }
 }
 
