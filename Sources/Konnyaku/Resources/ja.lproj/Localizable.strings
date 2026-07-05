@@ -3,8 +3,22 @@
 "menu.cancel_download" = "ダウンロードを中止";
 "menu.move_overlay" = "字幕の位置とサイズを調整 (ドラッグ)";
 "menu.open_language_settings" = "システム設定から手動でダウンロード… (確実・進捗表示あり)";
+"menu.share_view" = "共有ビューを開く… (ウィンドウ共有用)";
+"menu.share_view.change" = "共有ビューの共有元を変更…";
+"menu.close_share_view" = "共有ビューを閉じる";
 "menu.settings" = "設定…";
 "menu.quit" = "Konnyaku を終了";
+
+"shareview.title" = "Konnyaku 共有ビュー";
+"shareview.source_ended" = "共有元のウィンドウが利用できなくなりました";
+"shareview.capture_failed" = "画面キャプチャに失敗しました";
+"shareview.repick" = "ウィンドウを選び直す…";
+"shareview.select_window" = "共有するウィンドウを選択";
+"shareview.no_windows" = "共有できるウィンドウが見つかりません";
+"shareview.load_failed" = "ウィンドウ一覧を取得できませんでした";
+"shareview.refresh" = "一覧を更新";
+"shareview.start_share" = "このウィンドウの共有を開始";
+"shareview.permission_needed" = "共有ビューには画面収録の許可が必要です。システム設定 > プライバシーとセキュリティ > 画面とシステムオーディオの収録 で Konnyaku を許可し、アプリを再起動してください。";
 
 "settings.section.language" = "言語";
 "settings.section.translation" = "翻訳";

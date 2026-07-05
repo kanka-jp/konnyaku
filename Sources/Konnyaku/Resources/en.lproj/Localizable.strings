@@ -3,8 +3,22 @@
 "menu.cancel_download" = "Cancel Download";
 "menu.move_overlay" = "Adjust Subtitle Position & Size (Drag)";
 "menu.open_language_settings" = "Download Manually in System Settings… (reliable, shows progress)";
+"menu.share_view" = "Open Share View… (for Window Sharing)";
+"menu.share_view.change" = "Change Share View Source…";
+"menu.close_share_view" = "Close Share View";
 "menu.settings" = "Settings…";
 "menu.quit" = "Quit Konnyaku";
+
+"shareview.title" = "Konnyaku Share View";
+"shareview.source_ended" = "The shared window is no longer available";
+"shareview.capture_failed" = "Screen capture failed";
+"shareview.repick" = "Choose Window…";
+"shareview.select_window" = "Choose a Window to Share";
+"shareview.no_windows" = "No shareable windows found";
+"shareview.load_failed" = "Could not load the window list";
+"shareview.refresh" = "Refresh List";
+"shareview.start_share" = "Start Sharing This Window";
+"shareview.permission_needed" = "The share view needs Screen Recording permission. Allow Konnyaku in System Settings > Privacy & Security > Screen & System Audio Recording, then relaunch the app.";
 
 "settings.section.language" = "Languages";
 "settings.section.translation" = "Translation";

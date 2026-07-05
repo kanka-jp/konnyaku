@@ -73,6 +73,17 @@ private struct MenuContent: View {
 
         Divider()
 
+        Button(controller.isShareViewOpen ? t("menu.share_view.change") : t("menu.share_view")) {
+            controller.openShareView()
+        }
+        if controller.isShareViewOpen {
+            Button(t("menu.close_share_view")) {
+                controller.closeShareView()
+            }
+        }
+
+        Divider()
+
         Button(t("menu.settings")) {
             // 設定ウィンドウが既に開いて背面にある場合、SettingsView.onAppear は再発火
             // しない (再挿入されない) ため、メニュー経路ではここでも activate + 前面化する
