@@ -279,7 +279,9 @@ final class ShareViewController: NSObject, NSWindowDelegate {
                 videoHeight = Self.minContentSize.height
             }
             return NSSize(
-                width: (videoHeight / ratio).rounded(),
+                // 切り上げ丸め: 最近接丸めだと丸め後の幅 × ratio が下限の映像高を僅かに
+                // 割る縦横比が残る (横ドラッグの下限補正と同じ理由)
+                width: (videoHeight / ratio).rounded(.up),
                 height: (videoHeight + bandHeight + chrome).rounded()
             )
         }
