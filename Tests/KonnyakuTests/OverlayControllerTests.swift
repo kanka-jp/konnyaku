@@ -325,6 +325,20 @@ struct OverlayControllerTests {
         #expect(target == secondaryVisible)
     }
 
+    // stale savedOrigin (どのスクリーンとも intersects しない) + 画面幅級 savedSize の
+    // fallback 復元経路。unclamped な default frame を返すと margin 分はみ出す regression を防ぐ
+    @Test
+    func resolvedShowFrameClampsOversizedSavedSizeWhenOriginMatchesNoScreen() {
+        let main = NSRect(x: 0, y: 0, width: 1000, height: 800)
+        let frame = OverlayController.resolvedShowFrame(
+            fontScale: 1.0, savedOrigin: NSPoint(x: 5000, y: 5000), savedSize: NSSize(width: 990, height: 790),
+            screenFrames: [main], mainScreenFrame: main, margin: 24
+        )
+        #expect(frame.maxX <= main.maxX)
+        #expect(frame.maxY <= main.maxY)
+        #expect(frame.size == NSSize(width: 990, height: 790))
+    }
+
     // savedOrigin なし + 画面幅級の savedSize (部分破損等) の復元経路。default origin
     // (margin, margin) のまま返すと margin 分はみ出す regression を防ぐ
     @Test

@@ -78,6 +78,10 @@ final class OverlayController: NSObject, NSWindowDelegate {
         // 配列順で無関係な画面へ上書きしてしまうのを防ぐ)。重ならない場合のみ探し直す
         if !targetScreen.intersects(candidate) {
             guard let actualScreen = screenFrames.first(where: { $0.intersects(candidate) }) else {
+                // モニター構成変更等で savedOrigin がどのスクリーンとも重ならない場合の
+                // fallback。savedOrigin nil 経路と同様、画面幅級の savedSize で default
+                // origin のまま返すと margin 分はみ出すためクランプする
+                frame.origin = clampedOrigin(origin: frame.origin, size: frame.size, screenFrame: targetScreen)
                 return frame
             }
             targetScreen = actualScreen
@@ -205,8 +209,8 @@ final class OverlayController: NSObject, NSWindowDelegate {
         )
     }
 
-    // サイズを先に画面内へ収めてから origin をクランプする (リサイズ終端・保存サイズ
-    // 復元の共通経路。origin だけのクランプではパネルが画面より大きい場合に収まらない)
+    // サイズを先に画面内へ収めてから origin をクランプする (リサイズ終端とドラッグ中
+    // 移動の共通経路。origin だけのクランプではパネルが画面より大きい場合に収まらない)
     nonisolated static func clampedFrame(frame: NSRect, screenFrame: NSRect) -> NSRect {
         var frame = frame
         frame.size.width = min(frame.width, screenFrame.width)
