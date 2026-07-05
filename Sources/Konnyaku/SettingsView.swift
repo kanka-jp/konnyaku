@@ -127,8 +127,8 @@ struct SettingsView: View {
         .formStyle(.grouped)
         .frame(width: 440, height: 480)
         .onAppear {
-            // メニューバー常駐 (LSUIElement) のため、開いた経路によらずここで activate
-            // しないと設定ウィンドウが背面に開く
+            // メニューバー常駐 (LSUIElement) のため、開いた経路によらずここで activate +
+            // 前面化しないと設定ウィンドウが背面に開く
             NSApp.activate()
             SettingsWindowPresenter.bringToFront()
         }
@@ -144,18 +144,28 @@ struct SettingsView: View {
 enum SettingsWindowPresenter {
     // SwiftUI が Settings scene のウィンドウに与える固定 identifier
     private static let windowIdentifier = "com_apple_SwiftUI_Settings_window"
+    private static var pendingAttempts: [DispatchWorkItem] = []
 
     static func bringToFront() {
+        // 初回オープンは menu ボタンと onAppear の双方から呼ばれるため、前回分を
+        // 破棄して callback の重複実行を防ぐ
+        for attempt in pendingAttempts { attempt.cancel() }
+        pendingAttempts = []
         // openSettings() 直後はウィンドウの setup 完了前で前面化が上書きされうるため、
         // 時間差で数回試す
         for delay in [0, 100, 300] {
-            DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(delay)) {
+            let attempt = DispatchWorkItem {
                 guard let window = NSApp.windows.first(where: {
                     $0.identifier?.rawValue == windowIdentifier
                 }) else { return }
+                // 遅延分は、ユーザーが直後に閉じたウィンドウを resurrect しないよう可視時のみ
+                if delay > 0 && !window.isVisible { return }
                 window.makeKeyAndOrderFront(nil)
                 window.orderFrontRegardless()
             }
+            pendingAttempts.append(attempt)
+            DispatchQueue.main.asyncAfter(
+                deadline: .now() + .milliseconds(delay), execute: attempt)
         }
     }
 }
