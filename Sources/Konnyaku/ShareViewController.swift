@@ -51,6 +51,10 @@ final class ShareViewController: NSObject, NSWindowDelegate {
         guard let contentView else { return }
         viewState.stoppedMessage = nil
         Task {
+            // Task 実行前に windowWillClose → engine.stop() が完走していると、世代ガード
+            // (開始中の停止のみ検出) をすり抜けてウィンドウ無しのキャプチャが残るため、
+            // 開始時点で共有ビューが生きていることを確認する
+            guard isOpen else { return }
             await engine.startCapture(
                 with: filter, renderer: contentView.videoLayer.sampleBufferRenderer)
         }
@@ -93,13 +97,21 @@ final class ShareViewController: NSObject, NSWindowDelegate {
             viewState: viewState,
             onRepick: { [weak self] in self?.engine.presentPicker() }
         )
+        let styleMask: NSWindow.StyleMask = [.titled, .closable, .miniaturizable, .resizable]
+        // 初回作成でも followSourceAspect と同じく装飾 (タイトルバー) 込みで画面内に
+        // 収める。window 生成前のため装飾高は class method で求める
+        let probe = NSRect(x: 0, y: 0, width: 100, height: 100)
+        let chrome = NSWindow.frameRect(forContentRect: probe, styleMask: styleMask).height
+            - probe.height
+        let screenFrame = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1280, height: 800)
         let contentSize = Self.initialContentSize(
             sourceSizePoints: sourceSizePoints,
-            screenVisibleSize: NSScreen.main?.visibleFrame.size ?? NSSize(width: 1280, height: 800)
+            screenVisibleSize: NSSize(
+                width: screenFrame.width, height: max(screenFrame.height - chrome, 1))
         )
         let window = NSWindow(
             contentRect: NSRect(origin: .zero, size: contentSize),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            styleMask: styleMask,
             backing: .buffered,
             defer: false
         )
@@ -111,6 +123,13 @@ final class ShareViewController: NSObject, NSWindowDelegate {
         window.contentView = contentView
         window.delegate = self
         window.center()
+        // center() はフレームが visibleFrame をはみ出しても引き戻さない
+        var frame = window.frame
+        frame.origin = OverlayController.clampedOrigin(
+            origin: frame.origin, size: frame.size, screenFrame: screenFrame)
+        if frame != window.frame {
+            window.setFrame(frame, display: false)
+        }
         window.makeKeyAndOrderFront(nil)
         // LSUIElement app は activate しないとウィンドウが背面に開く。activate() 単発は
         // cooperative で不確実なため orderFrontRegardless も併用する
