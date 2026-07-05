@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct SubtitleView: View {
@@ -45,7 +46,7 @@ struct SubtitleView: View {
         }
         .overlay {
             if settings.isMovable {
-                ResizeCursorZones()
+                ResizeCursorTracking()
             }
         }
     }
@@ -89,48 +90,79 @@ struct SubtitleView: View {
     }
 }
 
-// borderless パネルでは AppKit がエッジホバー時のリサイズカーソルを出さないため、
-// 調整モード中のみ辺・角に透明領域を重ねて方向別リサイズカーソルを示す。
-// NSCursor.set() の手動管理は AppKit のカーソル更新に上書きされうるため、
-// 宣言的な pointerStyle で SwiftUI にカーソル管理を委ねる
-private struct ResizeCursorZones: View {
-    private static let edgeThickness: CGFloat = 8
-    private static let cornerSize: CGFloat = 16
+// 字幕パネルは nonactivating で key window にならないため、SwiftUI の hover /
+// pointerStyle 系は発火しない (key window 前提のトラッキングのため。onHover /
+// pointerStyle とも実機でカーソルが変わらないことを確認済み)。NSTrackingArea を
+// .activeAlways で張り、mouseMoved で方向別リサイズカーソルを自前更新する
+struct ResizeCursorTracking: NSViewRepresentable {
+    func makeNSView(context: Context) -> TrackingView { TrackingView() }
+    func updateNSView(_ nsView: TrackingView, context: Context) {}
 
-    var body: some View {
-        GeometryReader { geo in
-            let width = geo.size.width
-            let height = geo.size.height
-            cursorZone(.top)
-                .frame(width: max(0, width - Self.cornerSize * 2), height: Self.edgeThickness)
-                .position(x: width / 2, y: Self.edgeThickness / 2)
-            cursorZone(.bottom)
-                .frame(width: max(0, width - Self.cornerSize * 2), height: Self.edgeThickness)
-                .position(x: width / 2, y: height - Self.edgeThickness / 2)
-            cursorZone(.leading)
-                .frame(width: Self.edgeThickness, height: max(0, height - Self.cornerSize * 2))
-                .position(x: Self.edgeThickness / 2, y: height / 2)
-            cursorZone(.trailing)
-                .frame(width: Self.edgeThickness, height: max(0, height - Self.cornerSize * 2))
-                .position(x: width - Self.edgeThickness / 2, y: height / 2)
-            cursorZone(.topLeading)
-                .frame(width: Self.cornerSize, height: Self.cornerSize)
-                .position(x: Self.cornerSize / 2, y: Self.cornerSize / 2)
-            cursorZone(.topTrailing)
-                .frame(width: Self.cornerSize, height: Self.cornerSize)
-                .position(x: width - Self.cornerSize / 2, y: Self.cornerSize / 2)
-            cursorZone(.bottomLeading)
-                .frame(width: Self.cornerSize, height: Self.cornerSize)
-                .position(x: Self.cornerSize / 2, y: height - Self.cornerSize / 2)
-            cursorZone(.bottomTrailing)
-                .frame(width: Self.cornerSize, height: Self.cornerSize)
-                .position(x: width - Self.cornerSize / 2, y: height - Self.cornerSize / 2)
+    final class TrackingView: NSView {
+        nonisolated static let edgeThickness: CGFloat = 8
+        nonisolated static let cornerSize: CGFloat = 16
+
+        override func updateTrackingAreas() {
+            super.updateTrackingAreas()
+            trackingAreas.forEach(removeTrackingArea)
+            addTrackingArea(NSTrackingArea(
+                rect: .zero,
+                options: [.activeAlways, .mouseMoved, .mouseEnteredAndExited, .inVisibleRect],
+                owner: self,
+                userInfo: nil
+            ))
         }
-    }
 
-    private func cursorZone(_ position: FrameResizePosition) -> some View {
-        Color.clear
-            .contentShape(Rectangle())
-            .pointerStyle(.frameResize(position: position))
+        // クリック・背景ドラッグ・エッジリサイズのイベントを奪わない (tracking area の
+        // enter/moved/exited は hit testing と独立に owner へ届くため nil でよい)
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+        override func mouseEntered(with event: NSEvent) {
+            updateCursor(with: event)
+        }
+
+        override func mouseMoved(with event: NSEvent) {
+            updateCursor(with: event)
+        }
+
+        override func mouseExited(with event: NSEvent) {
+            NSCursor.arrow.set()
+        }
+
+        // 調整モード解除等でホバー中にビューが外れた場合もリサイズカーソルを残さない
+        override func viewWillMove(toWindow newWindow: NSWindow?) {
+            super.viewWillMove(toWindow: newWindow)
+            if newWindow == nil {
+                NSCursor.arrow.set()
+            }
+        }
+
+        private func updateCursor(with event: NSEvent) {
+            let point = convert(event.locationInWindow, from: nil)
+            if let position = Self.frameResizePosition(at: point, in: bounds) {
+                NSCursor.frameResize(position: position, directions: .all).set()
+            } else {
+                NSCursor.arrow.set()
+            }
+        }
+
+        // 非 flipped 座標 (y=0 が下端) 前提。角 (cornerSize 四方) を辺より優先する
+        nonisolated static func frameResizePosition(
+            at point: NSPoint, in bounds: NSRect
+        ) -> NSCursor.FrameResizePosition? {
+            let nearLeft = point.x <= bounds.minX + cornerSize
+            let nearRight = point.x >= bounds.maxX - cornerSize
+            let nearBottom = point.y <= bounds.minY + cornerSize
+            let nearTop = point.y >= bounds.maxY - cornerSize
+            if nearTop, nearLeft { return .topLeft }
+            if nearTop, nearRight { return .topRight }
+            if nearBottom, nearLeft { return .bottomLeft }
+            if nearBottom, nearRight { return .bottomRight }
+            if point.y >= bounds.maxY - edgeThickness { return .top }
+            if point.y <= bounds.minY + edgeThickness { return .bottom }
+            if point.x <= bounds.minX + edgeThickness { return .left }
+            if point.x >= bounds.maxX - edgeThickness { return .right }
+            return nil
+        }
     }
 }
