@@ -153,13 +153,17 @@ enum SettingsWindowPresenter {
         pendingAttempts = []
         // openSettings() 直後はウィンドウの setup 完了前で前面化が上書きされうるため、
         // 時間差で数回試す
-        for delay in [0, 100, 300] {
+        let delays = [0, 100, 300]
+        for delay in delays {
             let attempt = DispatchWorkItem {
                 guard let window = NSApp.windows.first(where: {
                     $0.identifier?.rawValue == windowIdentifier
                 }) else {
-                    // 非公開 identifier が将来変わると無音で再発するため痕跡を残す
-                    debugLog("settings window not found by identifier (+\(delay)ms)")
+                    // setup 完了前の miss は正常系でも起きうるため、非公開 identifier の
+                    // 変更で無音再発する事態の痕跡は最終 attempt の失敗のみ残す
+                    if delay == delays.last {
+                        debugLog("settings window not found by identifier (+\(delay)ms)")
+                    }
                     return
                 }
                 // 遅延分は、ユーザーが直後に閉じたウィンドウを resurrect しないよう可視時のみ
