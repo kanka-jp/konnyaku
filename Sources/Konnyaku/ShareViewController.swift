@@ -17,6 +17,7 @@ final class ShareViewController: NSObject, NSWindowDelegate {
     @ObservationIgnored private let viewState = ShareViewState()
     @ObservationIgnored private var deps: (state: CaptionState, settings: OverlaySettings, languages: LanguageSettings)?
     @ObservationIgnored private var isEngineConfigured = false
+    @ObservationIgnored private var reloadGeneration = 0
 
     nonisolated static let minContentSize = NSSize(width: 320, height: 180)
     nonisolated static let defaultContentSize = NSSize(width: 960, height: 540)
@@ -54,20 +55,29 @@ final class ShareViewController: NSObject, NSWindowDelegate {
     private func beginSelection() {
         // 既存キャプチャは選択が確定するまで継続する (「共有元を変更…」中も配信を切らない)
         viewState.phase = .selecting
+        reloadGeneration += 1
+        let generation = reloadGeneration
         Task {
             guard isOpen else { return }
-            await reloadWindows()
+            await reloadWindows(generation: generation)
         }
     }
 
-    private func reloadWindows() async {
+    private func reloadWindows(generation: Int) async {
+        // 取得中の再オープン・「一覧を更新」連打で複数の取得が並行すると、完了順の逆転で
+        // 古い結果 (失敗含む) が新しい成功を上書きしうるため、最新要求以外は書き込まない
+        // (captureGeneration と同じ latest-wins パターン)
+        guard generation == reloadGeneration else { return }
         viewState.windowListStatus = .loading
         do {
-            viewState.windows = try await engine.loadShareableWindows()
+            let windows = try await engine.loadShareableWindows()
+            guard generation == reloadGeneration else { return }
+            viewState.windows = windows
             viewState.windowListStatus = .loaded
-            debugLog("shareable windows: \(viewState.windows.count)")
+            debugLog("shareable windows: \(windows.count)")
         } catch {
             debugLog("load shareable windows failed: \(error)")
+            guard generation == reloadGeneration else { return }
             viewState.windows = []
             viewState.windowListStatus = .failed
         }
