@@ -6,6 +6,7 @@ struct SubtitleView: View {
     let state: CaptionState
     let settings: OverlaySettings
     let languages: LanguageSettings
+    let onFinishMoving: () -> Void
 
     var body: some View {
         VStack(spacing: 8) {
@@ -32,6 +33,19 @@ struct SubtitleView: View {
             if settings.isMovable {
                 RoundedRectangle(cornerRadius: 12)
                     .strokeBorder(.orange, style: StrokeStyle(lineWidth: 2, dash: [8, 6]))
+            }
+        }
+        // 操作 UI は調整対象のパネル内に出す (別の固定パネルだと、どのパネルを
+        // 調整しているかとの視覚的な対応が切れる)。字幕は下寄せのため上部が空く
+        .overlay(alignment: .top) {
+            if settings.isMovable {
+                MovingControlsView { onFinishMoving() }
+                    .padding(.top, 14)
+            }
+        }
+        .overlay {
+            if settings.isMovable {
+                ResizeCursorZones()
             }
         }
     }
@@ -72,5 +86,51 @@ struct SubtitleView: View {
         .padding(.horizontal, 18)
         .padding(.vertical, 8)
         .background(.black.opacity(0.55), in: RoundedRectangle(cornerRadius: 12))
+    }
+}
+
+// borderless パネルでは AppKit がエッジホバー時のリサイズカーソルを出さないため、
+// 調整モード中のみ辺・角に透明領域を重ねて方向別リサイズカーソルを示す。
+// NSCursor.set() の手動管理は AppKit のカーソル更新に上書きされうるため、
+// 宣言的な pointerStyle で SwiftUI にカーソル管理を委ねる
+private struct ResizeCursorZones: View {
+    private static let edgeThickness: CGFloat = 8
+    private static let cornerSize: CGFloat = 16
+
+    var body: some View {
+        GeometryReader { geo in
+            let width = geo.size.width
+            let height = geo.size.height
+            cursorZone(.top)
+                .frame(width: max(0, width - Self.cornerSize * 2), height: Self.edgeThickness)
+                .position(x: width / 2, y: Self.edgeThickness / 2)
+            cursorZone(.bottom)
+                .frame(width: max(0, width - Self.cornerSize * 2), height: Self.edgeThickness)
+                .position(x: width / 2, y: height - Self.edgeThickness / 2)
+            cursorZone(.leading)
+                .frame(width: Self.edgeThickness, height: max(0, height - Self.cornerSize * 2))
+                .position(x: Self.edgeThickness / 2, y: height / 2)
+            cursorZone(.trailing)
+                .frame(width: Self.edgeThickness, height: max(0, height - Self.cornerSize * 2))
+                .position(x: width - Self.edgeThickness / 2, y: height / 2)
+            cursorZone(.topLeading)
+                .frame(width: Self.cornerSize, height: Self.cornerSize)
+                .position(x: Self.cornerSize / 2, y: Self.cornerSize / 2)
+            cursorZone(.topTrailing)
+                .frame(width: Self.cornerSize, height: Self.cornerSize)
+                .position(x: width - Self.cornerSize / 2, y: Self.cornerSize / 2)
+            cursorZone(.bottomLeading)
+                .frame(width: Self.cornerSize, height: Self.cornerSize)
+                .position(x: Self.cornerSize / 2, y: height - Self.cornerSize / 2)
+            cursorZone(.bottomTrailing)
+                .frame(width: Self.cornerSize, height: Self.cornerSize)
+                .position(x: width - Self.cornerSize / 2, y: height - Self.cornerSize / 2)
+        }
+    }
+
+    private func cursorZone(_ position: FrameResizePosition) -> some View {
+        Color.clear
+            .contentShape(Rectangle())
+            .pointerStyle(.frameResize(position: position))
     }
 }

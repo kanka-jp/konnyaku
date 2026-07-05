@@ -8,6 +8,9 @@ struct MovingControlsView: View {
             Text(t("overlay.hint"))
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(.orange)
+                // 最小幅 (minPanelSize 320pt) のパネル内でもボタンごと収まるよう縮小を許す
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
             Button {
                 onFinishMoving()
             } label: {

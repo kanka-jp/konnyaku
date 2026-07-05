@@ -15,7 +15,7 @@ struct SubtitleViewTests {
             ConfigStore.inputLanguageKey: "ja-JP",
             ConfigStore.outputLanguageKey: "ja-JP",
         ])
-        let view = SubtitleView(state: CaptionState(), settings: settings, languages: languages)
+        let view = SubtitleView(state: CaptionState(), settings: settings, languages: languages, onFinishMoving: {})
 
         #expect(view.showsPreview)
         #expect(!view.sourceLines.isEmpty)
@@ -31,7 +31,7 @@ struct SubtitleViewTests {
             ConfigStore.inputLanguageKey: "ja-JP",
             ConfigStore.outputLanguageKey: "en-US",
         ])
-        let view = SubtitleView(state: CaptionState(), settings: settings, languages: languages)
+        let view = SubtitleView(state: CaptionState(), settings: settings, languages: languages, onFinishMoving: {})
 
         #expect(view.showsPreview)
         #expect(!view.translationLines.isEmpty)
