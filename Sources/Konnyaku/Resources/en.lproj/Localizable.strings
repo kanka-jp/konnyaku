@@ -1,7 +1,7 @@
 "menu.start" = "Start Subtitles";
 "menu.stop" = "Stop Subtitles";
 "menu.cancel_download" = "Cancel Download";
-"menu.move_overlay" = "Adjust Subtitle Position (Drag)";
+"menu.move_overlay" = "Adjust Subtitle Position & Size (Drag)";
 "menu.open_language_settings" = "Download Manually in System Settings… (reliable, shows progress)";
 "menu.settings" = "Settings…";
 "menu.quit" = "Quit Konnyaku";
@@ -17,11 +17,11 @@
 "settings.realtime_translation" = "Real-Time Translation While Speaking";
 "settings.realtime_translation.help" = "When off, translation waits for each sentence to be finalized";
 "settings.font_size" = "Text Size";
-"settings.overlay_position" = "Subtitle Position";
-"settings.overlay_position.adjust" = "Adjust by Dragging…";
-"settings.overlay_position.finish" = "Finish Adjusting";
-"settings.overlay_position.reset" = "Reset to Default";
-"settings.overlay_position.help" = "While adjusting, drag the subtitles to move them, then click \"Done\" to lock";
+"settings.overlay_frame" = "Subtitle Position & Size";
+"settings.overlay_frame.adjust" = "Adjust by Dragging…";
+"settings.overlay_frame.finish" = "Finish Adjusting";
+"settings.overlay_frame.reset" = "Reset to Default";
+"settings.overlay_frame.help" = "While adjusting, drag the subtitles to move them, drag the edges to resize, then click \"Done\" to lock";
 "settings.font_size.decrease" = "Decrease text size";
 "settings.font_size.increase" = "Increase text size";
 "settings.correction" = "Refine Transcription with AI";
@@ -55,7 +55,7 @@
 "correction.unavailable.device" = "This device does not support Apple Intelligence";
 "correction.unavailable.not_ready" = "The Apple Intelligence model is not ready yet";
 
-"overlay.hint" = "Drag to reposition";
+"overlay.hint" = "Drag to move / drag edges to resize";
 "overlay.done" = "Done";
 "overlay.preview_source" = "Recognized speech appears here";
 "overlay.preview_translation" = "Translation appears here";

@@ -191,8 +191,8 @@ final class AppController {
         overlay.setMovable(movable)
     }
 
-    func resetOverlayPosition() {
-        overlay.resetPosition(fontScale: settings.fontScale)
+    func resetOverlayFrame() {
+        overlay.resetFrame(fontScale: settings.fontScale)
     }
 
     private func showOverlay() {
