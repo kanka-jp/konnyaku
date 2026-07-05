@@ -165,7 +165,12 @@ final class ShareViewController: NSObject, NSWindowDelegate {
             height * boost / screenVisibleSize.height,
             1
         )
-        return NSSize(width: width * boost / spill, height: height * boost / spill)
+        // 整数 pt へ丸める (浮動小数の端数はウィンドウサイズとして無意味で、期待値の
+        // 厳密比較を演算順序の変更に対して頑健にする)
+        return NSSize(
+            width: (width * boost / spill).rounded(),
+            height: (height * boost / spill).rounded()
+        )
     }
 
     // 現在の幅を保って高さを新縦横比に合わせる (最小サイズを下回る場合は縦横比を
@@ -182,10 +187,11 @@ final class ShareViewController: NSObject, NSWindowDelegate {
         width *= boost
         height *= boost
         guard screenVisibleSize.width > 1, screenVisibleSize.height > 1 else {
-            return NSSize(width: width, height: height)
+            return NSSize(width: width.rounded(), height: height.rounded())
         }
         let spill = max(width / screenVisibleSize.width, height / screenVisibleSize.height, 1)
-        return NSSize(width: width / spill, height: height / spill)
+        // 整数 pt へ丸める (initialContentSize と同じ理由)
+        return NSSize(width: (width / spill).rounded(), height: (height / spill).rounded())
     }
 }
 
