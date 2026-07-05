@@ -216,8 +216,10 @@ final class ShareViewController: NSObject, NSWindowDelegate {
     // それだけでは共有元の縦横比変化後に letterbox が Meet 配信へ残り続ける。
     // sourceSize は縦横比のみ使うため pt / px どちらの単位でもよい
     private func followSourceAspect(_ sourceSize: CGSize) {
-        sourceAspect = sourceSize
+        // 代入は window 存在確認の後 (close 後の遅延通知で stale な縦横比が復活し、
+        // 次回オープン時の選択前リサイズに適用されるのを防ぐ)
         guard let window else { return }
+        sourceAspect = sourceSize
         applyBandHeight()
         let bandHeight = appliedBandHeight
         if bandHeight > 0 {
