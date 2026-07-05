@@ -79,6 +79,9 @@ final class ShareViewController: NSObject, NSWindowDelegate {
             // 追従経路が発火しないため、ここで現フレームを新縦横比へ合わせ直す
             followSourceAspect(sourceSizePoints)
             window.makeKeyAndOrderFront(nil)
+            // LSUIElement app は activate() 単発の前面化が cooperative で不確実
+            // (SettingsWindowPresenter と同じ問題系)
+            window.orderFrontRegardless()
             NSApp.activate()
             return
         }
@@ -109,7 +112,9 @@ final class ShareViewController: NSObject, NSWindowDelegate {
         window.delegate = self
         window.center()
         window.makeKeyAndOrderFront(nil)
-        // LSUIElement app は activate しないとウィンドウが背面に開く
+        // LSUIElement app は activate しないとウィンドウが背面に開く。activate() 単発は
+        // cooperative で不確実なため orderFrontRegardless も併用する
+        window.orderFrontRegardless()
         NSApp.activate()
         self.window = window
         self.contentView = contentView
@@ -122,14 +127,26 @@ final class ShareViewController: NSObject, NSWindowDelegate {
     private func followSourceAspect(_ sourceSize: CGSize) {
         guard let window else { return }
         window.contentAspectRatio = sourceSize
+        let screenFrame = (window.screen ?? NSScreen.main)?.visibleFrame
+            ?? NSRect(x: 0, y: 0, width: 1280, height: 800)
+        // 画面内クランプはタイトルバー等の装飾分を差し引いた高さで行う (content だけ
+        // 画面高に収めても装飾込みフレームがはみ出すため)
+        let chrome = window.frame.height - window.contentRect(forFrameRect: window.frame).height
         let currentWidth = window.contentRect(forFrameRect: window.frame).width
         window.setContentSize(
             Self.followedContentSize(
                 currentWidth: currentWidth,
                 sourceSize: sourceSize,
-                screenVisibleSize: (window.screen ?? NSScreen.main)?.visibleFrame.size
-                    ?? NSSize(width: 1280, height: 800)
+                screenVisibleSize: NSSize(
+                    width: screenFrame.width, height: max(screenFrame.height - chrome, 1))
             ))
+        // 拡大方向のリサイズでフレームが画面外へ出た場合は画面内へ引き戻す
+        var frame = window.frame
+        frame.origin = OverlayController.clampedOrigin(
+            origin: frame.origin, size: frame.size, screenFrame: screenFrame)
+        if frame != window.frame {
+            window.setFrame(frame, display: true)
+        }
     }
 
     func windowWillClose(_ notification: Notification) {
