@@ -3,8 +3,17 @@
 "menu.cancel_download" = "ダウンロードを中止";
 "menu.move_overlay" = "字幕の位置とサイズを調整 (ドラッグ)";
 "menu.open_language_settings" = "システム設定から手動でダウンロード… (確実・進捗表示あり)";
+"menu.share_view" = "共有ビューを開く… (ウィンドウ共有用)";
+"menu.share_view.change" = "共有ビューの共有元を変更…";
+"menu.close_share_view" = "共有ビューを閉じる";
 "menu.settings" = "設定…";
 "menu.quit" = "Konnyaku を終了";
+
+"shareview.title" = "Konnyaku 共有ビュー";
+"shareview.source_ended" = "共有元のウィンドウが利用できなくなりました";
+"shareview.capture_failed" = "画面キャプチャに失敗しました";
+"shareview.picker_failed" = "ウィンドウ選択を開けませんでした";
+"shareview.repick" = "ウィンドウを選び直す…";
 
 "settings.section.language" = "言語";
 "settings.section.translation" = "翻訳";

@@ -7,7 +7,14 @@ struct SubtitleView: View {
     let state: CaptionState
     let settings: OverlaySettings
     let languages: LanguageSettings
+    // 共有ビューでは調整モードの枠・操作 UI・プレビュー行を出さない (Meet の視聴者に
+    // 映る面に管理 UI を混ぜない)
+    var showsAdjustmentUI = true
     let onFinishMoving: () -> Void
+
+    private var isAdjusting: Bool {
+        settings.isMovable && showsAdjustmentUI
+    }
 
     var body: some View {
         VStack(spacing: 8) {
@@ -31,7 +38,7 @@ struct SubtitleView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
         .overlay {
-            if settings.isMovable {
+            if isAdjusting {
                 RoundedRectangle(cornerRadius: 12)
                     .strokeBorder(.orange, style: StrokeStyle(lineWidth: 2, dash: [8, 6]))
             }
@@ -39,13 +46,13 @@ struct SubtitleView: View {
         // 操作 UI は調整対象のパネル内に出す (別の固定パネルだと、どのパネルを
         // 調整しているかとの視覚的な対応が切れる)。字幕は下寄せのため上部が空く
         .overlay(alignment: .top) {
-            if settings.isMovable {
+            if isAdjusting {
                 MovingControlsView { onFinishMoving() }
                     .padding(.top, 14)
             }
         }
         .overlay {
-            if settings.isMovable {
+            if isAdjusting {
                 ResizeCursorTracking()
             }
         }
@@ -53,7 +60,7 @@ struct SubtitleView: View {
 
     // 位置調整中に字幕が流れていないと枠線だけで実際の見え方が分からないため
     var showsPreview: Bool {
-        settings.isMovable && state.sourceDisplayLines.isEmpty && state.translationDisplayLines.isEmpty
+        isAdjusting && state.sourceDisplayLines.isEmpty && state.translationDisplayLines.isEmpty
     }
 
     var sourceLines: [CaptionState.DisplayLine] {

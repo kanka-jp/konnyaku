@@ -12,6 +12,7 @@ final class AppController {
     let languages: LanguageSettings
 
     private let overlay = OverlayController()
+    private let shareView = ShareViewController()
     private var pipeline: CaptionPipeline?
     private(set) var isBusy = false
     // 非 nil の間、ModelDownloadView の translationTask がモデル DL を実行する
@@ -193,6 +194,18 @@ final class AppController {
 
     func resetOverlayFrame() {
         overlay.resetFrame(fontScale: settings.fontScale)
+    }
+
+    var isShareViewOpen: Bool {
+        shareView.isOpen
+    }
+
+    func openShareView() {
+        shareView.presentPicker(state: state, settings: settings, languages: languages)
+    }
+
+    func closeShareView() {
+        shareView.close()
     }
 
     private func showOverlay() {

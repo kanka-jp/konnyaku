@@ -3,8 +3,17 @@
 "menu.cancel_download" = "Cancel Download";
 "menu.move_overlay" = "Adjust Subtitle Position & Size (Drag)";
 "menu.open_language_settings" = "Download Manually in System Settings… (reliable, shows progress)";
+"menu.share_view" = "Open Share View… (for Window Sharing)";
+"menu.share_view.change" = "Change Share View Source…";
+"menu.close_share_view" = "Close Share View";
 "menu.settings" = "Settings…";
 "menu.quit" = "Quit Konnyaku";
+
+"shareview.title" = "Konnyaku Share View";
+"shareview.source_ended" = "The shared window is no longer available";
+"shareview.capture_failed" = "Screen capture failed";
+"shareview.picker_failed" = "Could not open the window picker";
+"shareview.repick" = "Choose Window…";
 
 "settings.section.language" = "Languages";
 "settings.section.translation" = "Translation";
