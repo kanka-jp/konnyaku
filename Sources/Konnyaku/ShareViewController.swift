@@ -267,7 +267,12 @@ final class ShareViewController: NSObject, NSWindowDelegate {
         // 映像高から再構成する (提案高をそのまま返すと、帯高 > 最小 content 高のときに
         // content が帯より低くなり映像が 0 高になる)
         if abs(frameSize.width - sender.frame.width) < 0.5 {
-            let videoHeight = max(frameSize.height - chrome - bandHeight, 1)
+            var videoHeight = max(frameSize.height - chrome - bandHeight, 1)
+            // 縦長ソースを縮めると導出幅が最小幅 320 を割るため、横ドラッグと対称に
+            // 最小幅の下限を保って映像高を再構成する
+            if videoHeight / ratio < Self.minContentSize.width {
+                videoHeight = (Self.minContentSize.width * ratio).rounded(.up)
+            }
             return NSSize(
                 width: (videoHeight / ratio).rounded(),
                 height: (videoHeight + bandHeight + chrome).rounded()
