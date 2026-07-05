@@ -130,9 +130,32 @@ struct SettingsView: View {
             // メニューバー常駐 (LSUIElement) のため、開いた経路によらずここで activate
             // しないと設定ウィンドウが背面に開く
             NSApp.activate()
+            SettingsWindowPresenter.bringToFront()
         }
         .task {
             await controller.loadLanguages()
+        }
+    }
+}
+
+// macOS 14+ の activate() は cooperative で、非アクティブな LSUIElement アプリを前面化
+// できないことがある (FB10184971) ため、activation の成否に依存せず前面化する
+@MainActor
+enum SettingsWindowPresenter {
+    // SwiftUI が Settings scene のウィンドウに与える固定 identifier
+    private static let windowIdentifier = "com_apple_SwiftUI_Settings_window"
+
+    static func bringToFront() {
+        // openSettings() 直後はウィンドウの setup 完了前で前面化が上書きされうるため、
+        // 時間差で数回試す
+        for delay in [0, 100, 300] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(delay)) {
+                guard let window = NSApp.windows.first(where: {
+                    $0.identifier?.rawValue == windowIdentifier
+                }) else { return }
+                window.makeKeyAndOrderFront(nil)
+                window.orderFrontRegardless()
+            }
         }
     }
 }
