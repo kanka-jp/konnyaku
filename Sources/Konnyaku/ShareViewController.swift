@@ -273,10 +273,16 @@ final class ShareViewController: NSObject, NSWindowDelegate {
                 height: (videoHeight + bandHeight + chrome).rounded()
             )
         }
-        let videoHeight = frameSize.width * ratio
+        // 横ドラッグでも映像高の下限を保つ (横長ソースを最小幅まで縮めると映像高が
+        // contentMinSize の下限 = 180 + 帯 を割り、AppKit の後段クランプが高さだけ
+        // 引き上げて恒常的な letterbox になる)
+        var width = frameSize.width
+        if width * ratio < Self.minContentSize.height {
+            width = (Self.minContentSize.height / ratio).rounded()
+        }
         return NSSize(
-            width: frameSize.width,
-            height: (videoHeight + bandHeight + chrome).rounded()
+            width: width,
+            height: (width * ratio + bandHeight + chrome).rounded()
         )
     }
 
