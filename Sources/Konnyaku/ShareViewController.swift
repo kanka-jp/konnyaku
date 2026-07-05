@@ -273,6 +273,11 @@ final class ShareViewController: NSObject, NSWindowDelegate {
             if videoHeight / ratio < Self.minContentSize.width {
                 videoHeight = (Self.minContentSize.width * ratio).rounded(.up)
             }
+            // 超横長ソース (ratio < 180/320) では幅下限の補正後も映像高が 180 を割る
+            // ため、映像高の下限も併せて保つ (このとき幅 180/ratio ≥ 320 で幅下限も充足)
+            if videoHeight < Self.minContentSize.height {
+                videoHeight = Self.minContentSize.height
+            }
             return NSSize(
                 width: (videoHeight / ratio).rounded(),
                 height: (videoHeight + bandHeight + chrome).rounded()
