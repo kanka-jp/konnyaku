@@ -99,7 +99,7 @@ final class ShareViewController: NSObject, NSWindowDelegate {
         guard let contentView else { return }
         viewState.phase = .capturing
         Task {
-            // Task 実行前に windowWillClose → engine.stop() が完走していると、世代ガード
+            // Task 実行前に windowWillClose → engine の停止が完走していると、世代ガード
             // (開始中の停止のみ検出) をすり抜けてウィンドウ無しのキャプチャが残るため、
             // 開始時点で共有ビューが生きていることを確認する
             guard isOpen else { return }
@@ -286,10 +286,10 @@ final class ShareViewController: NSObject, NSWindowDelegate {
         contentView = nil
         isOpen = false
         sourceAspect = nil
-        // stop() の async 実行を待たず同期で世代を進める (close 直後の再オープンで、
+        // 停止の async 実行を待たず同期で世代を進める (close 直後の再オープンで、
         // queued 済みの旧サイズ通知が新ウィンドウへ適用されるのを防ぐ)
-        engine.invalidate()
-        Task { await engine.stop() }
+        let generation = engine.invalidate()
+        Task { await engine.stop(ifCurrent: generation) }
     }
 
     // 現在の幅を保って映像部の高さを新縦横比に合わせる (band 配置では extraHeight に
