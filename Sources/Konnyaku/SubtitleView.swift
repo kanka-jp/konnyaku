@@ -1,4 +1,3 @@
-import AppKit
 import SwiftUI
 
 struct SubtitleView: View {
@@ -91,7 +90,9 @@ struct SubtitleView: View {
 }
 
 // borderless パネルでは AppKit がエッジホバー時のリサイズカーソルを出さないため、
-// 調整モード中のみ辺・角に透明なホバー領域を重ねてリサイズ可能であることを示す
+// 調整モード中のみ辺・角に透明領域を重ねて方向別リサイズカーソルを示す。
+// NSCursor.set() の手動管理は AppKit のカーソル更新に上書きされうるため、
+// 宣言的な pointerStyle で SwiftUI にカーソル管理を委ねる
 private struct ResizeCursorZones: View {
     private static let edgeThickness: CGFloat = 8
     private static let cornerSize: CGFloat = 16
@@ -106,36 +107,30 @@ private struct ResizeCursorZones: View {
             cursorZone(.bottom)
                 .frame(width: max(0, width - Self.cornerSize * 2), height: Self.edgeThickness)
                 .position(x: width / 2, y: height - Self.edgeThickness / 2)
-            cursorZone(.left)
+            cursorZone(.leading)
                 .frame(width: Self.edgeThickness, height: max(0, height - Self.cornerSize * 2))
                 .position(x: Self.edgeThickness / 2, y: height / 2)
-            cursorZone(.right)
+            cursorZone(.trailing)
                 .frame(width: Self.edgeThickness, height: max(0, height - Self.cornerSize * 2))
                 .position(x: width - Self.edgeThickness / 2, y: height / 2)
-            cursorZone(.topLeft)
+            cursorZone(.topLeading)
                 .frame(width: Self.cornerSize, height: Self.cornerSize)
                 .position(x: Self.cornerSize / 2, y: Self.cornerSize / 2)
-            cursorZone(.topRight)
+            cursorZone(.topTrailing)
                 .frame(width: Self.cornerSize, height: Self.cornerSize)
                 .position(x: width - Self.cornerSize / 2, y: Self.cornerSize / 2)
-            cursorZone(.bottomLeft)
+            cursorZone(.bottomLeading)
                 .frame(width: Self.cornerSize, height: Self.cornerSize)
                 .position(x: Self.cornerSize / 2, y: height - Self.cornerSize / 2)
-            cursorZone(.bottomRight)
+            cursorZone(.bottomTrailing)
                 .frame(width: Self.cornerSize, height: Self.cornerSize)
                 .position(x: width - Self.cornerSize / 2, y: height - Self.cornerSize / 2)
         }
     }
 
-    private func cursorZone(_ position: NSCursor.FrameResizePosition) -> some View {
+    private func cursorZone(_ position: FrameResizePosition) -> some View {
         Color.clear
             .contentShape(Rectangle())
-            .onHover { inside in
-                if inside {
-                    NSCursor.frameResize(position: position, directions: .all).set()
-                } else {
-                    NSCursor.arrow.set()
-                }
-            }
+            .pointerStyle(.frameResize(position: position))
     }
 }
