@@ -157,7 +157,11 @@ enum SettingsWindowPresenter {
             let attempt = DispatchWorkItem {
                 guard let window = NSApp.windows.first(where: {
                     $0.identifier?.rawValue == windowIdentifier
-                }) else { return }
+                }) else {
+                    // 非公開 identifier が将来変わると無音で再発するため痕跡を残す
+                    debugLog("settings window not found by identifier (+\(delay)ms)")
+                    return
+                }
                 // 遅延分は、ユーザーが直後に閉じたウィンドウを resurrect しないよう可視時のみ
                 if delay > 0 && !window.isVisible { return }
                 window.makeKeyAndOrderFront(nil)
