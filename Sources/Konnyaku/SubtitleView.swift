@@ -10,6 +10,9 @@ struct SubtitleView: View {
     // 共有ビューでは調整モードの枠・操作 UI・プレビュー行を出さない (Meet の視聴者に
     // 映る面に管理 UI を混ぜない)
     var showsAdjustmentUI = true
+    // 共有ビューの subtitle-position = top で上寄せにする (画面全体オーバーレイは
+    // ドラッグで自由配置のため常に既定の下寄せ)
+    var alignsToTop = false
     let onFinishMoving: () -> Void
 
     private var isAdjusting: Bool {
@@ -18,7 +21,9 @@ struct SubtitleView: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            Spacer(minLength: 0)
+            if !alignsToTop {
+                Spacer(minLength: 0)
+            }
             if !sourceLines.isEmpty {
                 subtitleBlock(
                     sourceLines,
@@ -35,8 +40,11 @@ struct SubtitleView: View {
                     color: .white
                 )
             }
+            if alignsToTop {
+                Spacer(minLength: 0)
+            }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignsToTop ? .top : .bottom)
         .overlay {
             if isAdjusting {
                 RoundedRectangle(cornerRadius: 12)

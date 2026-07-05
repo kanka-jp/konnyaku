@@ -111,6 +111,16 @@ struct SettingsView: View {
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
+
+                Picker(t("settings.subtitle_position"), selection: Binding(
+                    get: { controller.settings.subtitlePosition },
+                    set: { controller.settings.subtitlePosition = $0 }
+                )) {
+                    Text(t("settings.subtitle_position.bottom"))
+                        .tag(OverlaySettings.SubtitlePosition.bottom)
+                    Text(t("settings.subtitle_position.top"))
+                        .tag(OverlaySettings.SubtitlePosition.top)
+                }
             }
 
             Section(t("settings.section.correction")) {

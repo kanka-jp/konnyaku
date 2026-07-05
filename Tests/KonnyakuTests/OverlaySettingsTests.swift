@@ -65,4 +65,13 @@ struct OverlaySettingsTests {
         #expect(OverlaySettings(config: ["subtitle-placement": "bottom"]).subtitlePlacement == .overlay)
         #expect(OverlaySettings(config: [:]).subtitlePlacement == .overlay)
     }
+
+    @Test
+    func initParsesSubtitlePositionAndFallsBackToBottomForInvalidValue() {
+        #expect(OverlaySettings(config: ["subtitle-position": "top"]).subtitlePosition == .top)
+        #expect(OverlaySettings(config: ["subtitle-position": "bottom"]).subtitlePosition == .bottom)
+        // 手編集の不正値・未設定は bottom に倒す (config は手編集を許容する仕様)
+        #expect(OverlaySettings(config: ["subtitle-position": "middle"]).subtitlePosition == .bottom)
+        #expect(OverlaySettings(config: [:]).subtitlePosition == .bottom)
+    }
 }
