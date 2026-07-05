@@ -90,10 +90,10 @@ struct SubtitleView: View {
     }
 }
 
-// 字幕パネルは nonactivating で key window にならないため、SwiftUI の hover /
-// pointerStyle 系は発火しない (key window 前提のトラッキングのため。onHover /
-// pointerStyle とも実機でカーソルが変わらないことを確認済み)。NSTrackingArea を
-// .activeAlways で張り、mouseMoved で方向別リサイズカーソルを自前更新する
+// 字幕パネルは通常 key window にならない (AdjustablePanel が調整モード中のみ key を
+// 許可) ため、key window 前提の SwiftUI hover / pointerStyle 系は当てにできない
+// (onHover / pointerStyle とも実機でカーソルが変わらないことを確認済み)。
+// NSTrackingArea を .activeAlways で張り、mouseMoved で方向別カーソルを自前更新する
 struct ResizeCursorTracking: NSViewRepresentable {
     func makeNSView(context: Context) -> TrackingView { TrackingView() }
     func updateNSView(_ nsView: TrackingView, context: Context) {}

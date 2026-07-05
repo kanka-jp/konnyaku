@@ -12,7 +12,7 @@ final class OverlayController: NSObject, NSWindowDelegate {
     // 幅は字幕 2 行が読める最低限、高さは panelHeight の minimumHeight と揃える
     nonisolated static let minPanelSize = NSSize(width: 320, height: 200)
 
-    private var panel: NSPanel?
+    private var panel: AdjustablePanel?
     private var onFinishMoving: (() -> Void)?
 
     // 最大 8 行 (上下段とも確定 3 行 + 話し中/追従 1 行) 分の基準高さを fontScale に比例させ
@@ -110,7 +110,7 @@ final class OverlayController: NSObject, NSWindowDelegate {
             mainScreenFrame: mainScreen.visibleFrame,
             margin: Self.margin
         )
-        let panel = NSPanel(
+        let panel = AdjustablePanel(
             contentRect: frame,
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
@@ -124,6 +124,9 @@ final class OverlayController: NSObject, NSWindowDelegate {
         panel.hidesOnDeactivate = false
         panel.isReleasedWhenClosed = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        // mouseMoved は「key window + acceptsMouseMovedEvents」の両方が揃って初めて
+        // 配送される。ここで常時 true にしても key でない通常時は届かないため無害
+        panel.acceptsMouseMovedEvents = true
         panel.contentView = NSHostingView(
             rootView: SubtitleView(
                 state: state, settings: settings, languages: languages,
@@ -235,6 +238,21 @@ final class OverlayController: NSObject, NSWindowDelegate {
             }
             panel.ignoresMouseEvents = !movable
             panel.isMovableByWindowBackground = movable
+            // mouseMoved の配送と NSCursor の反映は key window であることが前提
+            // (非 key window では cursorUpdate が呼ばれず NSCursor.set も無視される)。
+            // nonactivating panel はアプリを activate せずに key になれる (Spotlight 型)
+            // ため、調整モード中のみ key を許可して makeKey する。通常時に key を許可
+            // したままにすると他アプリ利用中のキーボードフォーカスを奪うため戻す
+            panel.allowsKeyWhileAdjusting = movable
+            if movable {
+                panel.makeKey()
+            } else if panel.isKeyWindow {
+                // resignKey() の直接呼び出しは NSWindow docs で禁止されている
+                // (直接呼ばず別 window を key にせよ)。canBecomeKey が既に false の
+                // ため、再表示で AppKit に key の再評価をさせて安全に手放す
+                panel.orderOut(nil)
+                panel.orderFrontRegardless()
+            }
         }
     }
 
@@ -310,5 +328,16 @@ final class OverlayController: NSObject, NSWindowDelegate {
             width: defaults.double(forKey: Self.widthKey),
             height: defaults.double(forKey: Self.heightKey)
         )
+    }
+}
+
+// borderless window は canBecomeKey が既定 false で key になれず、mouseMoved の配送も
+// NSCursor の反映も封じられる。nonactivating panel はアプリを activate せずに key に
+// なれる (Spotlight 型) ため、調整モード中に限り key を許可してカーソル制御を成立させる
+final class AdjustablePanel: NSPanel {
+    var allowsKeyWhileAdjusting = false
+
+    override var canBecomeKey: Bool {
+        allowsKeyWhileAdjusting
     }
 }
