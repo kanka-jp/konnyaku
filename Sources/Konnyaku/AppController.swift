@@ -201,7 +201,7 @@ final class AppController {
     }
 
     func openShareView() {
-        shareView.presentPicker(state: state, settings: settings, languages: languages)
+        shareView.open(state: state, settings: settings, languages: languages)
     }
 
     func closeShareView() {

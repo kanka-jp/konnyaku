@@ -1,21 +1,18 @@
 import AVFoundation
 @preconcurrency import ScreenCaptureKit
 
-// 共有元の選択に SCContentSharingPicker を使う: ピッカーでの選択自体がユーザー同意に
-// なるため画面収録の TCC 許可が不要 (自前のウィンドウ一覧 UI も不要)
+// 共有元の選択は SCShareableContent のウィンドウ一覧 + アプリ内 UI で行う (画面収録の
+// TCC 許可が必要)。TCC 不要のシステム標準ピッカー (SCContentSharingPicker) は、常駐
+// キャプチャ (DisplayLink 等) を含む環境で「共有」の確定が機能しないケースが実機で
+// 確認されたため採用しない
 @MainActor
 final class WindowCaptureEngine: NSObject {
-    var onSelection: ((SCContentFilter) -> Void)?
     var onStopped: ((String) -> Void)?
-    // ピッカー起動失敗はキャプチャ停止と別経路で通知する (稼働中の「共有元を変更…」失敗を
-    // onStopped に流すと、配信継続中なのに停止 UI が重なる矛盾が起きる)
-    var onPickerFailed: ((String) -> Void)?
     // 共有ビュー側で window の縦横比を合わせ直すための通知
     var onSourceSizeChanged: ((CGSize) -> Void)?
 
     private var stream: SCStream?
     private var sink: CaptureFrameSink?
-    private var isObserverRegistered = false
     private let sampleQueue = DispatchQueue(label: "jp.kanka.konnyaku.capture")
     private var lastRequestedPixelSize = CGSize.zero
     // startCapture / stop のたびに進める世代番号。await 中に開始・停止が重なった場合や
@@ -35,24 +32,80 @@ final class WindowCaptureEngine: NSObject {
     // 渡すと即解放される。寿命を static で保証する
     private nonisolated static let streamBackgroundColor = CGColor(gray: 0, alpha: 1)
 
-    func presentPicker() {
-        let picker = SCContentSharingPicker.shared
-        var configuration = SCContentSharingPickerConfiguration()
-        configuration.allowedPickerModes = [.singleWindow]
-        // 共有ビュー自身を選ぶと映像の無限ミラーになるため自アプリを除外する
-        if let bundleID = Bundle.main.bundleIdentifier {
-            configuration.excludedBundleIDs = [bundleID]
+    struct ShareableWindow: Identifiable, Equatable, Sendable {
+        let id: CGWindowID
+        let title: String
+        let appName: String
+        let thumbnail: CGImage?
+
+        static func == (lhs: Self, rhs: Self) -> Bool {
+            lhs.id == rhs.id && lhs.title == rhs.title && lhs.appName == rhs.appName
+                && lhs.thumbnail === rhs.thumbnail
         }
-        picker.defaultConfiguration = configuration
-        if !isObserverRegistered {
-            picker.add(self)
-            isObserverRegistered = true
-        }
-        picker.isActive = true
-        picker.present()
     }
 
-    func startCapture(with filter: SCContentFilter, renderer: AVSampleBufferVideoRenderer) async {
+    // 画面収録の TCC 許可。request は未許可時に一度だけシステムダイアログを出すが、
+    // ダイアログでの許可はアプリ再起動後に反映される (macOS の画面収録 TCC の仕様)
+    nonisolated static func preflightScreenCaptureAccess() -> Bool {
+        CGPreflightScreenCaptureAccess()
+    }
+
+    nonisolated static func requestScreenCaptureAccess() -> Bool {
+        CGRequestScreenCaptureAccess()
+    }
+
+    func loadShareableWindows() async throws -> [ShareableWindow] {
+        let content = try await SCShareableContent.excludingDesktopWindows(
+            true, onScreenWindowsOnly: true)
+        let ownBundleID = Bundle.main.bundleIdentifier
+        let candidates = content.windows.filter { window in
+            Self.isShareable(
+                title: window.title,
+                ownerBundleID: window.owningApplication?.bundleIdentifier,
+                ownBundleID: ownBundleID,
+                frame: window.frame,
+                layer: window.windowLayer
+            )
+        }
+        var windows: [ShareableWindow] = []
+        for window in candidates {
+            windows.append(ShareableWindow(
+                id: window.windowID,
+                title: window.title ?? "",
+                appName: window.owningApplication?.applicationName ?? "",
+                thumbnail: await Self.thumbnail(of: window)
+            ))
+        }
+        return windows.sorted { ($0.appName, $0.title) < ($1.appName, $1.title) }
+    }
+
+    // 一覧表示用の静止画。失敗はプレースホルダー表示に落とすだけなので握りつぶす
+    private static func thumbnail(of window: SCWindow) async -> CGImage? {
+        let configuration = SCStreamConfiguration()
+        let aspect = max(window.frame.height, 1) / max(window.frame.width, 1)
+        let size = clampedPixelSize(CGSize(width: 480, height: 480 * aspect))
+        configuration.width = Int(size.width)
+        configuration.height = Int(size.height)
+        configuration.showsCursor = false
+        return try? await SCScreenshotManager.captureImage(
+            contentFilter: SCContentFilter(desktopIndependentWindow: window),
+            configuration: configuration
+        )
+    }
+
+    // メニューバー項目等の非通常レイヤー・タイトル無し・極小ウィンドウ・自アプリ
+    // (共有ビュー自身を選ぶと映像の無限ミラーになる) を一覧から除外する
+    nonisolated static func isShareable(
+        title: String?, ownerBundleID: String?, ownBundleID: String?, frame: CGRect, layer: Int
+    ) -> Bool {
+        guard let title, !title.isEmpty else { return false }
+        guard layer == 0 else { return false }
+        guard frame.width >= 64, frame.height >= 64 else { return false }
+        if let ownBundleID, ownerBundleID == ownBundleID { return false }
+        return true
+    }
+
+    func startCapture(windowID: CGWindowID, renderer: AVSampleBufferVideoRenderer) async {
         captureGeneration += 1
         let generation = captureGeneration
         consecutiveConfigUpdateFailures = 0
@@ -63,11 +116,37 @@ final class WindowCaptureEngine: NSObject {
             sink = nil
             try? await oldStream.stopCapture()
         }
+        // windowID は一覧表示からの経過で消えていることがあるため、開始時点で解決し直す
+        let window: SCWindow
+        do {
+            let content = try await SCShareableContent.excludingDesktopWindows(
+                true, onScreenWindowsOnly: true)
+            guard let found = content.windows.first(where: { $0.windowID == windowID }) else {
+                if generation == captureGeneration {
+                    onStopped?(t("shareview.source_ended"))
+                }
+                return
+            }
+            window = found
+        } catch {
+            debugLog("shareable content failed: \(error)")
+            if generation == captureGeneration {
+                onStopped?("\(t("shareview.capture_failed")): \(error.localizedDescription)")
+            }
+            return
+        }
+        guard generation == captureGeneration else { return }
+
+        let filter = SCContentFilter(desktopIndependentWindow: window)
         let pixelSize = Self.streamPixelSize(
             contentSizePoints: filter.contentRect.size,
             pointPixelScale: CGFloat(filter.pointPixelScale)
         )
         lastRequestedPixelSize = pixelSize
+        debugLog(
+            "capture start: contentRect=\(filter.contentRect) scale=\(filter.pointPixelScale) config=\(pixelSize)"
+        )
+        onSourceSizeChanged?(pixelSize)
         let sink = CaptureFrameSink(renderer: renderer) { [weak self] desired in
             Task { @MainActor in self?.followSourceResize(toPixelSize: desired, generation: generation) }
         } onStopped: { [weak self] error in
@@ -95,7 +174,6 @@ final class WindowCaptureEngine: NSObject {
 
     func stop() async {
         captureGeneration += 1
-        SCContentSharingPicker.shared.isActive = false
         guard let stream else { return }
         self.stream = nil
         sink = nil
@@ -201,27 +279,6 @@ final class WindowCaptureEngine: NSObject {
     ) -> Bool {
         abs(native.width - bufferSize.width) > tolerance
             || abs(native.height - bufferSize.height) > tolerance
-    }
-}
-
-extension WindowCaptureEngine: SCContentSharingPickerObserver {
-    nonisolated func contentSharingPicker(_ picker: SCContentSharingPicker, didCancelFor stream: SCStream?) {
-        // キャンセルは何もしない (既存のキャプチャ・共有ビューを維持する)
-    }
-
-    nonisolated func contentSharingPicker(
-        _ picker: SCContentSharingPicker, didUpdateWith filter: SCContentFilter, for stream: SCStream?
-    ) {
-        nonisolated(unsafe) let filter = filter
-        Task { @MainActor in
-            self.onSelection?(filter)
-        }
-    }
-
-    nonisolated func contentSharingPickerStartDidFailWithError(_ error: any Error) {
-        Task { @MainActor in
-            self.onPickerFailed?("\(t("shareview.picker_failed")): \(error.localizedDescription)")
-        }
     }
 }
 

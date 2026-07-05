@@ -12,8 +12,12 @@
 "shareview.title" = "Konnyaku Share View";
 "shareview.source_ended" = "The shared window is no longer available";
 "shareview.capture_failed" = "Screen capture failed";
-"shareview.picker_failed" = "Could not open the window picker";
 "shareview.repick" = "Choose Window…";
+"shareview.select_window" = "Choose a Window to Share";
+"shareview.no_windows" = "No shareable windows found";
+"shareview.refresh" = "Refresh List";
+"shareview.start_share" = "Start Sharing This Window";
+"shareview.permission_needed" = "The share view needs Screen Recording permission. Allow Konnyaku in System Settings > Privacy & Security > Screen & System Audio Recording, then relaunch the app.";
 
 "settings.section.language" = "Languages";
 "settings.section.translation" = "Translation";

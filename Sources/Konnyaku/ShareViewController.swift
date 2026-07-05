@@ -19,11 +19,21 @@ final class ShareViewController: NSObject, NSWindowDelegate {
     @ObservationIgnored private var isEngineConfigured = false
 
     nonisolated static let minContentSize = NSSize(width: 320, height: 180)
+    nonisolated static let defaultContentSize = NSSize(width: 960, height: 540)
 
-    func presentPicker(state: CaptionState, settings: OverlaySettings, languages: LanguageSettings) {
+    func open(state: CaptionState, settings: OverlaySettings, languages: LanguageSettings) {
         deps = (state, settings, languages)
         configureEngineIfNeeded()
-        engine.presentPicker()
+        if WindowCaptureEngine.preflightScreenCaptureAccess() {
+            viewState.needsPermission = false
+        } else {
+            // 未許可なら一度だけシステムダイアログが出る。許可はアプリ再起動後に反映される
+            // ため、本セッション中は許可待ち表示のまま
+            viewState.needsPermission = !WindowCaptureEngine.requestScreenCaptureAccess()
+        }
+        ensureWindow()
+        guard !viewState.needsPermission else { return }
+        beginSelection()
     }
 
     func close() {
@@ -33,56 +43,60 @@ final class ShareViewController: NSObject, NSWindowDelegate {
     private func configureEngineIfNeeded() {
         guard !isEngineConfigured else { return }
         isEngineConfigured = true
-        engine.onSelection = { [weak self] filter in
-            self?.beginCapture(with: filter)
-        }
         engine.onStopped = { [weak self] message in
             self?.showStopped(message)
-        }
-        engine.onPickerFailed = { [weak self] message in
-            self?.presentAlert(message)
         }
         engine.onSourceSizeChanged = { [weak self] pixelSize in
             self?.followSourceAspect(pixelSize)
         }
     }
 
-    private func beginCapture(with filter: SCContentFilter) {
-        ensureWindow(sourceSizePoints: filter.contentRect.size)
+    private func beginSelection() {
+        // 既存キャプチャは選択が確定するまで継続する (「共有元を変更…」中も配信を切らない)
+        viewState.phase = .selecting
+        Task {
+            guard isOpen else { return }
+            await reloadWindows()
+        }
+    }
+
+    private func reloadWindows() async {
+        do {
+            viewState.windows = try await engine.loadShareableWindows()
+            debugLog("shareable windows: \(viewState.windows.count)")
+        } catch {
+            debugLog("load shareable windows failed: \(error)")
+            viewState.windows = []
+        }
+    }
+
+    private func selectWindow(_ target: WindowCaptureEngine.ShareableWindow) {
         guard let contentView else { return }
-        viewState.stoppedMessage = nil
+        viewState.phase = .capturing
         Task {
             // Task 実行前に windowWillClose → engine.stop() が完走していると、世代ガード
             // (開始中の停止のみ検出) をすり抜けてウィンドウ無しのキャプチャが残るため、
             // 開始時点で共有ビューが生きていることを確認する
             guard isOpen else { return }
             await engine.startCapture(
-                with: filter, renderer: contentView.videoLayer.sampleBufferRenderer)
+                windowID: target.id, renderer: contentView.videoLayer.sampleBufferRenderer)
+        }
+    }
+
+    private func openScreenCaptureSettings() {
+        let pane = "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
+        if let url = URL(string: pane) {
+            NSWorkspace.shared.open(url)
         }
     }
 
     private func showStopped(_ message: String) {
-        if isOpen {
-            viewState.stoppedMessage = message
-        } else {
-            // ウィンドウがまだ無い段階の失敗 (キャプチャ開始失敗等) は表示先が無いため alert
-            presentAlert(message)
-        }
+        guard isOpen else { return }
+        viewState.phase = .stopped(message)
     }
 
-    private func presentAlert(_ message: String) {
-        let alert = NSAlert()
-        alert.alertStyle = .warning
-        alert.messageText = message
-        NSApp.activate()
-        alert.runModal()
-    }
-
-    private func ensureWindow(sourceSizePoints: CGSize) {
+    private func ensureWindow() {
         if let window {
-            // 再選択では新 stream のバッファが最初から新ソースサイズで作られ、リサイズ
-            // 追従経路が発火しないため、ここで現フレームを新縦横比へ合わせ直す
-            followSourceAspect(sourceSizePoints)
             window.makeKeyAndOrderFront(nil)
             // LSUIElement app は activate() 単発の前面化が cooperative で不確実
             // (SettingsWindowPresenter と同じ問題系)
@@ -96,19 +110,22 @@ final class ShareViewController: NSObject, NSWindowDelegate {
             settings: deps.settings,
             languages: deps.languages,
             viewState: viewState,
-            onRepick: { [weak self] in self?.engine.presentPicker() }
+            actions: ShareViewActions(
+                onSelect: { [weak self] target in self?.selectWindow(target) },
+                onReselect: { [weak self] in self?.beginSelection() },
+                onOpenSettings: { [weak self] in self?.openScreenCaptureSettings() }
+            )
         )
         let styleMask: NSWindow.StyleMask = [.titled, .closable, .miniaturizable, .resizable]
-        // 初回作成でも followSourceAspect と同じく装飾 (タイトルバー) 込みで画面内に
-        // 収める。window 生成前のため装飾高は class method で求める
+        // 装飾 (タイトルバー) 込みで画面内に収める。window 生成前のため装飾高は class
+        // method で求める
         let probe = NSRect(x: 0, y: 0, width: 100, height: 100)
         let chrome = NSWindow.frameRect(forContentRect: probe, styleMask: styleMask).height
             - probe.height
         let screenFrame = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1280, height: 800)
-        let contentSize = Self.initialContentSize(
-            sourceSizePoints: sourceSizePoints,
-            screenVisibleSize: NSSize(
-                width: screenFrame.width, height: max(screenFrame.height - chrome, 1))
+        let contentSize = NSSize(
+            width: min(Self.defaultContentSize.width, screenFrame.width),
+            height: min(Self.defaultContentSize.height, max(screenFrame.height - chrome, 1))
         )
         let window = NSWindow(
             contentRect: NSRect(origin: .zero, size: contentSize),
@@ -117,7 +134,6 @@ final class ShareViewController: NSObject, NSWindowDelegate {
             defer: false
         )
         window.title = t("shareview.title")
-        window.contentAspectRatio = sourceSizePoints
         window.contentMinSize = Self.minContentSize
         window.isReleasedWhenClosed = false
         window.tabbingMode = .disallowed
@@ -177,42 +193,9 @@ final class ShareViewController: NSObject, NSWindowDelegate {
         Task { await engine.stop() }
     }
 
-    // 共有元の縦横比を保ちつつ画面の 6 割程度に収める。共有元より大きくは開かない
-    // (拡大はぼやけるだけで益が無い)。contentMinSize (AppKit が強制する) を下回ると
-    // 実ウィンドウが計算値と乖離して縦横比が崩れるため、両辺を満たす共通係数で拡大する
-    nonisolated static func initialContentSize(
-        sourceSizePoints: CGSize, screenVisibleSize: CGSize
-    ) -> NSSize {
-        let fallback = NSSize(width: 960, height: 540)
-        guard sourceSizePoints.width > 1, sourceSizePoints.height > 1,
-              screenVisibleSize.width > 1, screenVisibleSize.height > 1 else { return fallback }
-        let scale = min(
-            screenVisibleSize.width * 0.6 / sourceSizePoints.width,
-            screenVisibleSize.height * 0.6 / sourceSizePoints.height,
-            1
-        )
-        let width = sourceSizePoints.width * scale
-        let height = sourceSizePoints.height * scale
-        let boost = max(minContentSize.width / width, minContentSize.height / height, 1)
-        // 極端な縦長/横長ソースでは最小サイズ充足の拡大が画面を超えるため、画面内に収まる
-        // ことを優先して縦横比を保って縮める (AppKit の contentMinSize 強制で生じうる
-        // letterbox は許容 — 画面外に開いて操作不能になるより良い)
-        let spill = max(
-            width * boost / screenVisibleSize.width,
-            height * boost / screenVisibleSize.height,
-            1
-        )
-        // 整数 pt へ丸める (浮動小数の端数はウィンドウサイズとして無意味で、期待値の
-        // 厳密比較を演算順序の変更に対して頑健にする)
-        return NSSize(
-            width: (width * boost / spill).rounded(),
-            height: (height * boost / spill).rounded()
-        )
-    }
-
     // 現在の幅を保って高さを新縦横比に合わせる (最小サイズを下回る場合は縦横比を
-    // 保ったまま両辺を拡大し、画面を超える場合は initialContentSize と同じく画面内を
-    // 優先して縮める — ライブ共有中に画面外へ飛び出すのを防ぐ)
+    // 保ったまま両辺を拡大し、画面を超える場合は画面内を優先して縮める — ライブ共有中に
+    // 画面外へ飛び出すのを防ぐ)
     nonisolated static func followedContentSize(
         currentWidth: CGFloat, sourceSize: CGSize, screenVisibleSize: CGSize
     ) -> NSSize {
@@ -227,7 +210,8 @@ final class ShareViewController: NSObject, NSWindowDelegate {
             return NSSize(width: width.rounded(), height: height.rounded())
         }
         let spill = max(width / screenVisibleSize.width, height / screenVisibleSize.height, 1)
-        // 整数 pt へ丸める (initialContentSize と同じ理由)
+        // 整数 pt へ丸める (浮動小数の端数はウィンドウサイズとして無意味で、期待値の
+        // 厳密比較を演算順序の変更に対して頑健にする)
         return NSSize(width: (width / spill).rounded(), height: (height / spill).rounded())
     }
 }
@@ -235,7 +219,21 @@ final class ShareViewController: NSObject, NSWindowDelegate {
 @MainActor
 @Observable
 final class ShareViewState {
-    var stoppedMessage: String?
+    enum Phase: Equatable {
+        case selecting
+        case capturing
+        case stopped(String)
+    }
+
+    var phase: Phase = .selecting
+    var windows: [WindowCaptureEngine.ShareableWindow] = []
+    var needsPermission = false
+}
+
+struct ShareViewActions {
+    let onSelect: (WindowCaptureEngine.ShareableWindow) -> Void
+    let onReselect: () -> Void
+    let onOpenSettings: () -> Void
 }
 
 // 映像は専用 view の backing layer として持つ。layer-backed view の layer へ手動
@@ -276,12 +274,12 @@ final class ShareContentView: NSView {
         settings: OverlaySettings,
         languages: LanguageSettings,
         viewState: ShareViewState,
-        onRepick: @escaping () -> Void
+        actions: ShareViewActions
     ) {
         overlayHost = NSHostingView(
             rootView: ShareOverlayView(
                 state: state, settings: settings, languages: languages,
-                viewState: viewState, onRepick: onRepick
+                viewState: viewState, actions: actions
             ))
         super.init(frame: .zero)
         wantsLayer = true
@@ -307,7 +305,7 @@ struct ShareOverlayView: View {
     let settings: OverlaySettings
     let languages: LanguageSettings
     let viewState: ShareViewState
-    let onRepick: () -> Void
+    let actions: ShareViewActions
 
     var body: some View {
         ZStack {
@@ -315,18 +313,117 @@ struct ShareOverlayView: View {
                 state: state, settings: settings, languages: languages,
                 showsAdjustmentUI: false, onFinishMoving: {}
             )
-            if let message = viewState.stoppedMessage {
-                VStack(spacing: 12) {
-                    Text(message)
-                        .foregroundStyle(.white)
-                    Button(t("shareview.repick")) {
-                        onRepick()
+            if viewState.needsPermission {
+                PermissionRequestView(onOpenSettings: actions.onOpenSettings)
+            } else {
+                switch viewState.phase {
+                case .selecting:
+                    WindowSelectView(
+                        windows: viewState.windows,
+                        onSelect: actions.onSelect,
+                        onRefresh: actions.onReselect
+                    )
+                case .capturing:
+                    EmptyView()
+                case .stopped(let message):
+                    VStack(spacing: 12) {
+                        Text(message)
+                            .foregroundStyle(.white)
+                        Button(t("shareview.repick")) {
+                            actions.onReselect()
+                        }
                     }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    // 半透過だと共有元消滅後も stale frame が Meet 視聴者に透けて見える
+                    .background(.black)
+                    .environment(\.colorScheme, .dark)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                // 半透過だと共有元消滅後も stale frame が Meet 視聴者に透けて見える
-                .background(.black)
             }
         }
+    }
+}
+
+// ウィンドウ前面化のクリックやスクロール操作が一覧の行に落ちて誤選択しないよう、
+// 「行クリックで選択 → 開始ボタンで確定」の 2 段階にする
+struct WindowSelectView: View {
+    let windows: [WindowCaptureEngine.ShareableWindow]
+    let onSelect: (WindowCaptureEngine.ShareableWindow) -> Void
+    let onRefresh: () -> Void
+
+    @State private var selectedID: CGWindowID?
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Text(t("shareview.select_window"))
+                .font(.headline)
+                .foregroundStyle(.white)
+            if windows.isEmpty {
+                Text(t("shareview.no_windows"))
+                    .foregroundStyle(.secondary)
+            } else {
+                List(windows, selection: $selectedID) { window in
+                    HStack(spacing: 10) {
+                        Group {
+                            if let thumbnail = window.thumbnail {
+                                Image(decorative: thumbnail, scale: 1)
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fit)
+                            } else {
+                                Image(systemName: "macwindow")
+                                    .font(.title)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .frame(width: 120, height: 68)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(window.title)
+                                .lineLimit(1)
+                            Text(window.appName)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                .scrollContentBackground(.hidden)
+                .padding(.horizontal, 16)
+            }
+            HStack(spacing: 12) {
+                Button(t("shareview.refresh")) {
+                    selectedID = nil
+                    onRefresh()
+                }
+                Button(t("shareview.start_share")) {
+                    if let selected = windows.first(where: { $0.id == selectedID }) {
+                        onSelect(selected)
+                    }
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(selectedID == nil || !windows.contains { $0.id == selectedID })
+            }
+        }
+        .padding(.vertical, 20)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(.black)
+        // 黒背景固定のため、ライト外観だと List 行や Button の既定文字色 (黒系) が溶ける
+        .environment(\.colorScheme, .dark)
+    }
+}
+
+struct PermissionRequestView: View {
+    let onOpenSettings: () -> Void
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Text(t("shareview.permission_needed"))
+                .foregroundStyle(.white)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 24)
+            Button(t("alert.open_settings")) {
+                onOpenSettings()
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(.black)
+        .environment(\.colorScheme, .dark)
     }
 }

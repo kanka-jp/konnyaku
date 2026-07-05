@@ -56,8 +56,8 @@ Settings window: 言語選択 / 翻訳 (エンジン・リアルタイム翻訳)
 | `CaptionPipeline` | 上記の接続、翻訳 worker、字幕状態 (`CaptionState`) の更新 |
 | `OverlayController` / `SubtitleView` | オーバーレイ window (位置記憶・移動モード) と 2 段字幕の描画 |
 | `LanguageSettings` / `OverlaySettings` / `ConfigStore` | 言語・表示設定の保持と `~/.config/konnyaku/config` (key = value プレーンテキスト、XDG_CONFIG_HOME 尊重) への永続化。オーバーレイ位置のみディスプレイ構成依存の状態として UserDefaults |
-| `WindowCaptureEngine` | SCContentSharingPicker の起動、SCStream のキャプチャ開始/停止、フレーム配送、共有元リサイズへの追従 |
-| `ShareViewController` | 共有ビュー window の生成、キャプチャ映像 (AVSampleBufferDisplayLayer) と字幕の合成、共有元消滅時のプレースホルダ |
+| `WindowCaptureEngine` | 共有可能ウィンドウの列挙 (SCShareableContent) とサムネイル取得、SCStream のキャプチャ開始/停止、フレーム配送、共有元リサイズへの追従 |
+| `ShareViewController` | 共有ビュー window の生成、ウィンドウ選択 UI、キャプチャ映像 (AVSampleBufferDisplayLayer) と字幕の合成、共有元消滅時のプレースホルダ |
 | `KonnyakuApp` / `SettingsView` / `AppController` | MenuBarExtra、設定ウィンドウ、Start/Stop、権限・モデル未インストール時の誘導 |
 
 ### オーバーレイの要件
@@ -73,8 +73,8 @@ Settings window: 言語選択 / 翻訳 (エンジン・リアルタイム翻訳)
 Meet (Chrome) の「ウィンドウ共有」は ScreenCaptureKit の単一ウィンドウキャプチャで、そのウィンドウの内容だけが配信される。別プロセスのオーバーレイ (NSPanel) は構造的に映らず、他アプリのキャプチャ結果へ外から字幕を注入する API も macOS に存在しない。そこで「相手に見えるピクセルを konnyaku 自身が所有するウィンドウ」を作る:
 
 ```text
-SCContentSharingPicker (システム標準のウィンドウ選択 UI)
-  → SCStream (対象ウィンドウのキャプチャ、30fps 起点)
+共有ビュー内のウィンドウ一覧 (SCShareableContent + SCScreenshotManager のサムネイル)
+  → SCStream (選択ウィンドウのキャプチャ、30fps 起点)
   → WindowCaptureEngine: CMSampleBuffer を AVSampleBufferVideoRenderer へ配送
   → ShareViewController:
        NSWindow (通常レベル・タイトル付き = Meet の共有リストに出る)
@@ -86,12 +86,12 @@ Meet ではこの「Konnyaku 共有ビュー」ウィンドウを共有する。
 
 設計上の判断:
 
-- **SCContentSharingPicker を使う**: ピッカーでの選択自体がユーザー同意になるため画面収録の TCC 許可が不要 (macOS 15+ の定期再確認ダイアログも回避)。自前のウィンドウ一覧 UI も不要。トレードオフとして選択はセッション跨ぎで記憶できない (毎回選ぶ)。字幕開始が毎回手動な既存 UX と整合するので許容
-- **再帰キャプチャの防止**: picker configuration の `excludedBundleIDs` に自アプリを指定し、共有ビュー自身を選べなくする
+- **共有元の選択は自前一覧 (SCShareableContent) + 画面収録の TCC 許可**: 当初は TCC 不要の SCContentSharingPicker (システム標準ピッカー) を採用したが、常駐キャプチャ (DisplayLink 等) を含む実環境で「共有」の確定操作が機能しないケースが確認された (最小再現アプリ + 正規署名 + Control Center / capture デーモン再起動 + TCC リセットでも再現し、アプリ側で修正不能)。画面収録の許可を初回に一度もらう代わりに、全環境で動作が検証できる自前一覧に切り替えた。選択は「行クリックで選択 → 開始ボタンで確定」の 2 段階 (ウィンドウ前面化のクリックによる誤選択の防止)
+- **再帰キャプチャの防止**: 一覧の列挙時に自アプリの bundle ID を除外し、共有ビュー自身を選べなくする
 - **共有元リサイズへの追従**: フレーム添付情報 (contentRect / contentScale / scaleFactor) から共有元の native ピクセルサイズを復元し、config と乖離したら `updateConfiguration` で追従する (縦横比の食い違いによる余白と解像度劣化を解消)
 - **共有元ウィンドウの消滅**: SCStreamDelegate のエラーで検出し、プレースホルダ + 再選択ボタンを表示する (黒画面のまま配信し続けない)
 - **制約**: 共有元の最小化中はフレームが配信されず映像が止まる (occlusion・別 Space は問題ない)
-- **不採用案**: 仮想カメラ (System Extension + notarization が ad-hoc 配布と両立しない)、Accessibility API での対象ウィンドウ自動リサイズ (AX 権限 + 他アプリへの副作用が過大)
+- **不採用案**: SCContentSharingPicker (上記の実環境問題)、仮想カメラ (System Extension + notarization が ad-hoc 配布と両立しない)、Accessibility API での対象ウィンドウ自動リサイズ (AX 権限 + 他アプリへの副作用が過大)
 
 ## 配布形態
 

@@ -6,67 +6,6 @@ import Testing
 
 struct ShareViewControllerTests {
     @Test
-    func initialContentSizePreservesSourceAspectRatio() {
-        let size = ShareViewController.initialContentSize(
-            sourceSizePoints: CGSize(width: 1600, height: 1000),
-            screenVisibleSize: CGSize(width: 1512, height: 950)
-        )
-        #expect(abs(size.width / size.height - 1.6) < 0.001)
-    }
-
-    @Test
-    func initialContentSizeShrinksLargeSourceToSixtyPercentOfScreen() {
-        let size = ShareViewController.initialContentSize(
-            sourceSizePoints: CGSize(width: 3000, height: 2000),
-            screenVisibleSize: CGSize(width: 1500, height: 1000)
-        )
-        #expect(size.width == 900)
-        #expect(size.height == 600)
-    }
-
-    @Test
-    func initialContentSizeDoesNotUpscaleSmallSource() {
-        let size = ShareViewController.initialContentSize(
-            sourceSizePoints: CGSize(width: 600, height: 400),
-            screenVisibleSize: CGSize(width: 3000, height: 2000)
-        )
-        #expect(size.width == 600)
-        #expect(size.height == 400)
-    }
-
-    @Test
-    func initialContentSizeEnforcesContentMinSizePreservingAspect() {
-        // 200x100pt: 幅基準 (320) だと高さ 160 < contentMinSize.height (180) で AppKit の
-        // 最小サイズ強制により縦横比が崩れるため、高さ基準の 1.8 倍で 360x180 になる
-        let size = ShareViewController.initialContentSize(
-            sourceSizePoints: CGSize(width: 200, height: 100),
-            screenVisibleSize: CGSize(width: 1500, height: 1000)
-        )
-        #expect(size == NSSize(width: 360, height: 180))
-        #expect(size.height >= ShareViewController.minContentSize.height)
-    }
-
-    @Test
-    func initialContentSizeFitsExtremePortraitSourceOnScreen() {
-        // 200x2000pt: 最小幅 320 の充足だけだと高さ 3200 で画面外に開く。画面内優先で
-        // 縦横比を保って縮める (0.3 倍 → 60x600 → min boost 5.33 倍 → 320x3200 → 1/3.2)
-        let size = ShareViewController.initialContentSize(
-            sourceSizePoints: CGSize(width: 200, height: 2000),
-            screenVisibleSize: CGSize(width: 1500, height: 1000)
-        )
-        #expect(size == NSSize(width: 100, height: 1000))
-    }
-
-    @Test
-    func initialContentSizeFallsBackOnDegenerateInput() {
-        let size = ShareViewController.initialContentSize(
-            sourceSizePoints: .zero,
-            screenVisibleSize: CGSize(width: 1500, height: 1000)
-        )
-        #expect(size == NSSize(width: 960, height: 540))
-    }
-
-    @Test
     func followedContentSizeKeepsWidthAndAdjustsHeightToNewAspect() {
         let size = ShareViewController.followedContentSize(
             currentWidth: 800, sourceSize: CGSize(width: 1600, height: 1000),
@@ -94,6 +33,33 @@ struct ShareViewControllerTests {
 }
 
 struct WindowCaptureEngineTests {
+    @Test
+    func isShareableExcludesOwnAppUntitledTinyAndNonNormalLayerWindows() {
+        let frame = CGRect(x: 0, y: 0, width: 800, height: 600)
+        #expect(WindowCaptureEngine.isShareable(
+            title: "Doc", ownerBundleID: "com.example.app", ownBundleID: "jp.kanka.konnyaku",
+            frame: frame, layer: 0
+        ))
+        // 自アプリ (共有ビュー自身の無限ミラー防止)
+        #expect(!WindowCaptureEngine.isShareable(
+            title: "Konnyaku 共有ビュー", ownerBundleID: "jp.kanka.konnyaku",
+            ownBundleID: "jp.kanka.konnyaku", frame: frame, layer: 0
+        ))
+        // タイトル無し / メニューバー等の非通常レイヤー / 極小ウィンドウ
+        #expect(!WindowCaptureEngine.isShareable(
+            title: nil, ownerBundleID: "com.example.app", ownBundleID: "jp.kanka.konnyaku",
+            frame: frame, layer: 0
+        ))
+        #expect(!WindowCaptureEngine.isShareable(
+            title: "Item-0", ownerBundleID: "com.example.app", ownBundleID: "jp.kanka.konnyaku",
+            frame: frame, layer: 25
+        ))
+        #expect(!WindowCaptureEngine.isShareable(
+            title: "Tiny", ownerBundleID: "com.example.app", ownBundleID: "jp.kanka.konnyaku",
+            frame: CGRect(x: 0, y: 0, width: 40, height: 40), layer: 0
+        ))
+    }
+
     @Test
     func streamPixelSizeMultipliesPointsByScale() {
         let size = WindowCaptureEngine.streamPixelSize(
