@@ -43,7 +43,7 @@ enum ConfigStore {
     # 字幕の文字サイズ: 0.5 〜 2.0 (0.1 刻み、既定 1.0)
     font-scale = 1.0
 
-    # 共有ビューの字幕配置: overlay (映像に重ねる) / band (映像下の黒帯に表示して映像と重ねない)
+    # 共有ビューの字幕配置: overlay (映像に重ねる) / band (映像の外の黒帯に表示して映像と重ねない)
     subtitle-placement = overlay
 
     # 共有ビューの字幕の表示位置: bottom (下) / top (上)

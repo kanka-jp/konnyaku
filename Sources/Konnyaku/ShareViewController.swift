@@ -469,17 +469,16 @@ struct ShareOverlayView: View {
     var body: some View {
         ZStack {
             if settings.subtitlePlacement == .band {
-                // 帯の高さに収めて映像と非重畳にする。超過分は映像から遠い側の行 (下帯
-                // なら古い行が上へ、上帯なら古い行が下へ) から隠れる
+                // 帯の高さに収めて映像と非重畳にする。帯内は位置に関わらず bottom 寄せ
+                // (最新行は末尾 = 下端) — 上寄せにすると超過時の下端クリップで最新行から
+                // 欠けてしまう。bottom 寄せなら常に古い行 (上側) から隠れる
                 VStack(spacing: 0) {
                     if settings.subtitlePosition == .bottom {
                         Spacer(minLength: 0)
                     }
                     SubtitleView(
                         state: state, settings: settings, languages: languages,
-                        showsAdjustmentUI: false,
-                        alignsToTop: settings.subtitlePosition == .top,
-                        onFinishMoving: {}
+                        showsAdjustmentUI: false, onFinishMoving: {}
                     )
                     .frame(height: ShareViewController.bandHeight(fontScale: settings.fontScale))
                     .clipped()
