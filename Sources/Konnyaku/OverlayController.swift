@@ -247,7 +247,11 @@ final class OverlayController: NSObject, NSWindowDelegate {
             if movable {
                 panel.makeKey()
             } else if panel.isKeyWindow {
-                panel.resignKey()
+                // resignKey() の直接呼び出しは NSWindow docs で禁止されている
+                // (直接呼ばず別 window を key にせよ)。canBecomeKey が既に false の
+                // ため、再表示で AppKit に key の再評価をさせて安全に手放す
+                panel.orderOut(nil)
+                panel.orderFrontRegardless()
             }
         }
     }
