@@ -162,7 +162,10 @@ final class ShareViewController: NSObject, NSWindowDelegate {
             defer: false
         )
         window.title = t("shareview.title")
-        window.contentMinSize = Self.minContentSize
+        window.contentMinSize = NSSize(
+            width: Self.minContentSize.width,
+            height: Self.minContentSize.height + appliedBandHeight
+        )
         window.isReleasedWhenClosed = false
         window.tabbingMode = .disallowed
         window.contentView = contentView
@@ -201,6 +204,12 @@ final class ShareViewController: NSObject, NSWindowDelegate {
     private func applyBandHeight() {
         appliedBandHeight = currentBandHeight
         contentView?.bandHeight = appliedBandHeight
+        // band 中は帯の分だけ最小 content 高も引き上げる (最小サイズ境界が「映像 0 高」を
+        // 許す値にならないように)
+        window?.contentMinSize = NSSize(
+            width: Self.minContentSize.width,
+            height: Self.minContentSize.height + appliedBandHeight
+        )
     }
 
     // contentAspectRatio はユーザーリサイズの制約のみで現フレームを変えないため、
