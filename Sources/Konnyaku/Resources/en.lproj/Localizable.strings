@@ -38,6 +38,10 @@
 "settings.overlay_frame.help" = "While adjusting, drag the subtitles to move them, drag the edges to resize, then click \"Done\" to lock";
 "settings.font_size.decrease" = "Decrease text size";
 "settings.font_size.increase" = "Increase text size";
+"settings.subtitle_placement" = "Share View Subtitle Placement";
+"settings.subtitle_placement.overlay" = "Over the Video";
+"settings.subtitle_placement.band" = "In a Band Below the Video";
+"settings.subtitle_placement.help" = "\"Band\" adds a dedicated strip below the share view video so subtitles never cover it (does not affect the full-screen overlay)";
 "settings.correction" = "Refine Transcription with AI";
 "settings.edit_vocabulary" = "Edit Custom Vocabulary…";
 "settings.auto_start" = "Start Subtitles Automatically at Launch";

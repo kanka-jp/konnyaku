@@ -17,9 +17,22 @@ final class ShareViewController: NSObject, NSWindowDelegate {
     @ObservationIgnored private var deps: (state: CaptionState, settings: OverlaySettings, languages: LanguageSettings)?
     @ObservationIgnored private var isEngineConfigured = false
     @ObservationIgnored private var reloadGeneration = 0
+    @ObservationIgnored private var sourceAspect: CGSize?
+    @ObservationIgnored private var appliedBandHeight: CGFloat = 0
 
     nonisolated static let minContentSize = NSSize(width: 320, height: 180)
     nonisolated static let defaultContentSize = NSSize(width: 960, height: 540)
+
+    // band 配置での字幕帯の高さ。字幕 2 段 (source 22pt + translation 30pt ブロック) が
+    // fontScale に比例して収まる目安
+    nonisolated static func bandHeight(fontScale: Double) -> CGFloat {
+        (160 * fontScale).rounded()
+    }
+
+    private var currentBandHeight: CGFloat {
+        guard let deps, deps.settings.subtitlePlacement == .band else { return 0 }
+        return Self.bandHeight(fontScale: deps.settings.fontScale)
+    }
 
     func open(state: CaptionState, settings: OverlaySettings, languages: LanguageSettings) {
         deps = (state, settings, languages)
@@ -86,7 +99,7 @@ final class ShareViewController: NSObject, NSWindowDelegate {
         guard let contentView else { return }
         viewState.phase = .capturing
         Task {
-            // Task 実行前に windowWillClose → engine.stop() が完走していると、世代ガード
+            // Task 実行前に windowWillClose → engine の停止が完走していると、世代ガード
             // (開始中の停止のみ検出) をすり抜けてウィンドウ無しのキャプチャが残るため、
             // 開始時点で共有ビューが生きていることを確認する
             guard isOpen else { return }
@@ -125,9 +138,12 @@ final class ShareViewController: NSObject, NSWindowDelegate {
             actions: ShareViewActions(
                 onSelect: { [weak self] target in self?.selectWindow(target) },
                 onReselect: { [weak self] in self?.beginSelection() },
-                onOpenSettings: { [weak self] in self?.openScreenCaptureSettings() }
+                onOpenSettings: { [weak self] in self?.openScreenCaptureSettings() },
+                onLayoutChanged: { [weak self] in self?.applyPlacementLayout() }
             )
         )
+        appliedBandHeight = currentBandHeight
+        contentView.bandHeight = appliedBandHeight
         let styleMask: NSWindow.StyleMask = [.titled, .closable, .miniaturizable, .resizable]
         // 装飾 (タイトルバー) 込みで画面内に収める。window 生成前のため装飾高は class
         // method で求める
@@ -146,7 +162,10 @@ final class ShareViewController: NSObject, NSWindowDelegate {
             defer: false
         )
         window.title = t("shareview.title")
-        window.contentMinSize = Self.minContentSize
+        window.contentMinSize = NSSize(
+            width: Self.minContentSize.width,
+            height: Self.minContentSize.height + appliedBandHeight
+        )
         window.isReleasedWhenClosed = false
         window.tabbingMode = .disallowed
         window.contentView = contentView
@@ -169,12 +188,47 @@ final class ShareViewController: NSObject, NSWindowDelegate {
         isOpen = true
     }
 
+    private func applyPlacementLayout() {
+        guard contentView != nil else { return }
+        // fontScale は overlay 配置では帯に影響しない。帯高が変わらないのに
+        // followSourceAspect を呼ぶと、手動で画面より大きくしたウィンドウが画面内
+        // クランプの再適用で意図せず縮む
+        guard currentBandHeight != appliedBandHeight else { return }
+        if let sourceAspect {
+            followSourceAspect(sourceAspect)
+        } else {
+            applyBandHeight()
+        }
+    }
+
+    private func applyBandHeight() {
+        appliedBandHeight = currentBandHeight
+        contentView?.bandHeight = appliedBandHeight
+        // band 中は帯の分だけ最小 content 高も引き上げる (最小サイズ境界が「映像 0 高」を
+        // 許す値にならないように)
+        window?.contentMinSize = NSSize(
+            width: Self.minContentSize.width,
+            height: Self.minContentSize.height + appliedBandHeight
+        )
+    }
+
     // contentAspectRatio はユーザーリサイズの制約のみで現フレームを変えないため、
     // それだけでは共有元の縦横比変化後に letterbox が Meet 配信へ残り続ける。
     // sourceSize は縦横比のみ使うため pt / px どちらの単位でもよい
     private func followSourceAspect(_ sourceSize: CGSize) {
+        // 代入は window 存在確認の後 (close 後の遅延通知で stale な縦横比が復活し、
+        // 次回オープン時の選択前リサイズに適用されるのを防ぐ)
         guard let window else { return }
-        window.contentAspectRatio = sourceSize
+        sourceAspect = sourceSize
+        applyBandHeight()
+        let bandHeight = appliedBandHeight
+        if bandHeight > 0 {
+            // band 分の加算定数は比率で表現できないため、比率制約を外して
+            // windowWillResize(_:to:) で「映像部の縦横比 + band」を強制する
+            window.contentAspectRatio = .zero
+        } else {
+            window.contentAspectRatio = sourceSize
+        }
         let screenFrame = (window.screen ?? NSScreen.main)?.visibleFrame
             ?? NSRect(x: 0, y: 0, width: 1280, height: 800)
         // 画面内クランプはタイトルバー等の装飾分を差し引いた高さで行う (content だけ
@@ -186,7 +240,8 @@ final class ShareViewController: NSObject, NSWindowDelegate {
                 currentWidth: currentWidth,
                 sourceSize: sourceSize,
                 screenVisibleSize: NSSize(
-                    width: screenFrame.width, height: max(screenFrame.height - chrome, 1))
+                    width: screenFrame.width, height: max(screenFrame.height - chrome, 1)),
+                extraHeight: bandHeight
             ))
         // 拡大方向のリサイズでフレームが画面外へ出た場合は画面内へ引き戻す
         var frame = window.frame
@@ -197,34 +252,91 @@ final class ShareViewController: NSObject, NSWindowDelegate {
         }
     }
 
+    // band 配置ではユーザーリサイズ中も「映像部の縦横比 + band 固定高」を保つ
+    // (contentAspectRatio では表現できない加算制約のため delegate で行う)
+    func windowWillResize(_ sender: NSWindow, to frameSize: NSSize) -> NSSize {
+        let bandHeight = currentBandHeight
+        guard sender === window, bandHeight > 0,
+              let sourceAspect, sourceAspect.width > 1, sourceAspect.height > 1 else {
+            return frameSize
+        }
+        let ratio = sourceAspect.height / sourceAspect.width
+        let chrome = sender.frame.height - sender.contentRect(forFrameRect: sender.frame).height
+        // 幅が変わらない提案 = 縦方向のドラッグ。幅基準で返すと高さが元に戻り縦リサイズが
+        // 効かなくなるため、このときだけ高さから幅を導出する。返す高さも clamp 後の
+        // 映像高から再構成する (提案高をそのまま返すと、帯高 > 最小 content 高のときに
+        // content が帯より低くなり映像が 0 高になる)
+        if abs(frameSize.width - sender.frame.width) < 0.5 {
+            var videoHeight = max(frameSize.height - chrome - bandHeight, 1)
+            // 縦長ソースを縮めると導出幅が最小幅 320 を割るため、横ドラッグと対称に
+            // 最小幅の下限を保って映像高を再構成する
+            if videoHeight / ratio < Self.minContentSize.width {
+                videoHeight = (Self.minContentSize.width * ratio).rounded(.up)
+            }
+            // 超横長ソース (ratio < 180/320) では幅下限の補正後も映像高が 180 を割る
+            // ため、映像高の下限も併せて保つ (このとき幅 180/ratio ≥ 320 で幅下限も充足)
+            if videoHeight < Self.minContentSize.height {
+                videoHeight = Self.minContentSize.height
+            }
+            return NSSize(
+                // 切り上げ丸め: 最近接丸めだと丸め後の幅 × ratio が下限の映像高を僅かに
+                // 割る縦横比が残る (横ドラッグの下限補正と同じ理由)
+                width: (videoHeight / ratio).rounded(.up),
+                height: (videoHeight + bandHeight + chrome).rounded()
+            )
+        }
+        // 横ドラッグでも映像高の下限を保つ (横長ソースを最小幅まで縮めると映像高が
+        // contentMinSize の下限 = 180 + 帯 を割り、AppKit の後段クランプが高さだけ
+        // 引き上げて恒常的な letterbox になる)
+        var width = frameSize.width
+        if width * ratio < Self.minContentSize.height {
+            // 切り上げ丸め: 最近接丸めだと丸め後の幅 × ratio が 180 を僅かに割る縦横比が残る
+            width = (Self.minContentSize.height / ratio).rounded(.up)
+        }
+        return NSSize(
+            width: width,
+            height: (width * ratio + bandHeight + chrome).rounded()
+        )
+    }
+
     func windowWillClose(_ notification: Notification) {
         guard (notification.object as? NSWindow) === window else { return }
         window = nil
         contentView = nil
         isOpen = false
-        Task { await engine.stop() }
+        sourceAspect = nil
+        // 停止の async 実行を待たず同期で世代を進める (close 直後の再オープンで、
+        // queued 済みの旧サイズ通知が新ウィンドウへ適用されるのを防ぐ)
+        let generation = engine.invalidate()
+        Task { await engine.stop(ifCurrent: generation) }
     }
 
-    // 現在の幅を保って高さを新縦横比に合わせる (最小サイズを下回る場合は縦横比を
-    // 保ったまま両辺を拡大し、画面を超える場合は画面内を優先して縮める — ライブ共有中に
-    // 画面外へ飛び出すのを防ぐ)
+    // 現在の幅を保って映像部の高さを新縦横比に合わせる (band 配置では extraHeight に
+    // 字幕帯の固定高を渡す)。最小サイズを下回る場合は映像部を拡大し、画面を超える場合は
+    // 画面内を優先して縮める — ライブ共有中に画面外へ飛び出すのを防ぐ
     nonisolated static func followedContentSize(
-        currentWidth: CGFloat, sourceSize: CGSize, screenVisibleSize: CGSize
+        currentWidth: CGFloat, sourceSize: CGSize, screenVisibleSize: CGSize,
+        extraHeight: CGFloat = 0
     ) -> NSSize {
         guard sourceSize.width > 1, sourceSize.height > 1 else { return minContentSize }
         let aspect = sourceSize.height / sourceSize.width
         var width = max(currentWidth, minContentSize.width)
-        var height = width * aspect
-        let boost = max(minContentSize.height / height, 1)
-        width *= boost
-        height *= boost
-        guard screenVisibleSize.width > 1, screenVisibleSize.height > 1 else {
-            return NSSize(width: width.rounded(), height: height.rounded())
+        // 最小高は映像部単体に課す (contentMinSize = minContentSize.height + 帯高と同じ
+        // 定義。合計高 180 を下限にすると AppKit の contentMinSize クランプと食い違い、
+        // クランプ後のサイズが映像の縦横比とずれる)
+        if width * aspect < minContentSize.height {
+            width = minContentSize.height / aspect
         }
-        let spill = max(width / screenVisibleSize.width, height / screenVisibleSize.height, 1)
+        if screenVisibleSize.width > 1, screenVisibleSize.height > 1 {
+            width = min(
+                width,
+                screenVisibleSize.width,
+                max((screenVisibleSize.height - extraHeight) / aspect, 1)
+            )
+        }
         // 整数 pt へ丸める (浮動小数の端数はウィンドウサイズとして無意味で、期待値の
         // 厳密比較を演算順序の変更に対して頑健にする)
-        return NSSize(width: (width / spill).rounded(), height: (height / spill).rounded())
+        return NSSize(width: width.rounded(), height: (width * aspect + extraHeight).rounded())
     }
 }
 
@@ -254,6 +366,7 @@ struct ShareViewActions {
     let onSelect: (WindowCaptureEngine.ShareableWindow) -> Void
     let onReselect: () -> Void
     let onOpenSettings: () -> Void
+    let onLayoutChanged: () -> Void
 }
 
 // 映像は専用 view の backing layer として持つ。layer-backed view の layer へ手動
@@ -285,6 +398,16 @@ final class ShareContentView: NSView {
     private let videoHost = VideoHostView()
     private let overlayHost: NSHostingView<ShareOverlayView>
 
+    // band 配置での字幕帯の高さ (0 = overlay 配置)。映像を帯の分だけ上に詰めて
+    // 字幕と映像を非重畳にする
+    var bandHeight: CGFloat = 0 {
+        didSet {
+            if bandHeight != oldValue {
+                needsLayout = true
+            }
+        }
+    }
+
     var videoLayer: AVSampleBufferDisplayLayer {
         videoHost.videoLayer
     }
@@ -315,7 +438,10 @@ final class ShareContentView: NSView {
 
     override func layout() {
         super.layout()
-        videoHost.frame = bounds
+        videoHost.frame = NSRect(
+            x: 0, y: bandHeight,
+            width: bounds.width, height: max(bounds.height - bandHeight, 0)
+        )
         overlayHost.frame = bounds
     }
 }
@@ -329,10 +455,24 @@ struct ShareOverlayView: View {
 
     var body: some View {
         ZStack {
-            SubtitleView(
-                state: state, settings: settings, languages: languages,
-                showsAdjustmentUI: false, onFinishMoving: {}
-            )
+            if settings.subtitlePlacement == .band {
+                // 帯の高さに収めて映像 (帯より上) と非重畳にする。超過分は古い行から
+                // 隠れる (bottom 寄せ)
+                VStack(spacing: 0) {
+                    Spacer(minLength: 0)
+                    SubtitleView(
+                        state: state, settings: settings, languages: languages,
+                        showsAdjustmentUI: false, onFinishMoving: {}
+                    )
+                    .frame(height: ShareViewController.bandHeight(fontScale: settings.fontScale))
+                    .clipped()
+                }
+            } else {
+                SubtitleView(
+                    state: state, settings: settings, languages: languages,
+                    showsAdjustmentUI: false, onFinishMoving: {}
+                )
+            }
             if viewState.needsPermission {
                 PermissionRequestView(onOpenSettings: actions.onOpenSettings)
             } else {
@@ -361,6 +501,10 @@ struct ShareOverlayView: View {
                 }
             }
         }
+        // 配置モード・文字サイズの変更を AppKit 側レイアウト (映像領域の分割) と
+        // ウィンドウサイズ制約へ即時反映する
+        .onChange(of: settings.subtitlePlacement) { actions.onLayoutChanged() }
+        .onChange(of: settings.fontScale) { actions.onLayoutChanged() }
     }
 }
 

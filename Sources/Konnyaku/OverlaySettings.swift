@@ -8,9 +8,21 @@ final class OverlaySettings {
         0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2.0,
     ]
 
+    // 共有ビューでの字幕の置き方 (画面全体オーバーレイには影響しない)
+    enum SubtitlePlacement: String, CaseIterable {
+        case overlay
+        case band
+    }
+
     var fontScale: Double {
         didSet {
             ConfigStore.set(String(fontScale), forKey: ConfigStore.fontScaleKey)
+        }
+    }
+
+    var subtitlePlacement: SubtitlePlacement {
+        didSet {
+            ConfigStore.set(subtitlePlacement.rawValue, forKey: ConfigStore.subtitlePlacementKey)
         }
     }
 
@@ -19,6 +31,8 @@ final class OverlaySettings {
     init(config: [String: String]) {
         let saved = config[ConfigStore.fontScaleKey].flatMap(Double.init) ?? 1.0
         fontScale = Self.fontScales.contains(saved) ? saved : 1.0
+        subtitlePlacement = config[ConfigStore.subtitlePlacementKey]
+            .flatMap(SubtitlePlacement.init(rawValue:)) ?? .overlay
     }
 
     private var fontScaleIndex: Int {

@@ -90,6 +90,7 @@ Meet ではこの「Konnyaku 共有ビュー」ウィンドウを共有する。
 - **再帰キャプチャの防止**: 一覧の列挙時に自アプリの bundle ID を除外し、共有ビュー自身を選べなくする
 - **共有元リサイズへの追従**: フレーム添付情報 (contentRect / contentScale / scaleFactor) から共有元の native ピクセルサイズを復元し、config と乖離したら `updateConfiguration` で追従する (縦横比の食い違いによる余白と解像度劣化を解消)
 - **共有元ウィンドウの消滅**: SCStreamDelegate のエラーで検出し、プレースホルダ + 再選択ボタンを表示する (黒画面のまま配信し続けない)
+- **字幕配置 (`subtitle-placement` = overlay / band)**: band は映像の下に字幕専用の黒帯 (高さ = 160 × fontScale) を設け、映像と字幕を非重畳にする。帯の加算定数は `contentAspectRatio` の比率制約で表現できないため、band 中は比率制約を外し `windowWillResize(_:to:)` で「映像部の縦横比 + 帯固定高」を強制する。設定変更は SwiftUI の `onChange` → AppKit レイアウト (映像領域の分割) とウィンドウサイズへ即時反映
 - **制約**: 共有元の最小化中はフレームが配信されず映像が止まる (occlusion・別 Space は問題ない)
 - **不採用案**: SCContentSharingPicker (上記の実環境問題)、仮想カメラ (System Extension + notarization が ad-hoc 配布と両立しない)、Accessibility API での対象ウィンドウ自動リサイズ (AX 権限 + 他アプリへの副作用が過大)
 

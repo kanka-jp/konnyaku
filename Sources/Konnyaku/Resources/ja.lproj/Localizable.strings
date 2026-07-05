@@ -38,6 +38,10 @@
 "settings.overlay_frame.help" = "調整中は字幕をドラッグで移動、端をドラッグでサイズ変更し、「完了」で固定します";
 "settings.font_size.decrease" = "文字を小さくする";
 "settings.font_size.increase" = "文字を大きくする";
+"settings.subtitle_placement" = "共有ビューの字幕配置";
+"settings.subtitle_placement.overlay" = "映像に重ねる";
+"settings.subtitle_placement.band" = "映像の下の黒帯に表示";
+"settings.subtitle_placement.help" = "「黒帯」にすると共有ビューの映像の下に字幕専用の帯を設け、映像と字幕が重なりません (画面全体オーバーレイには影響しません)";
 "settings.correction" = "AI で文字起こしを補正";
 "settings.edit_vocabulary" = "カスタム語彙を編集…";
 "settings.auto_start" = "起動時に字幕を自動で開始";

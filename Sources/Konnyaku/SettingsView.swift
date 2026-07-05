@@ -96,6 +96,21 @@ struct SettingsView: View {
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Picker(t("settings.subtitle_placement"), selection: Binding(
+                        get: { controller.settings.subtitlePlacement },
+                        set: { controller.settings.subtitlePlacement = $0 }
+                    )) {
+                        Text(t("settings.subtitle_placement.overlay"))
+                            .tag(OverlaySettings.SubtitlePlacement.overlay)
+                        Text(t("settings.subtitle_placement.band"))
+                            .tag(OverlaySettings.SubtitlePlacement.band)
+                    }
+                    Text(t("settings.subtitle_placement.help"))
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Section(t("settings.section.correction")) {

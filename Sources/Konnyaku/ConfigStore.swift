@@ -6,6 +6,7 @@ enum ConfigStore {
     static let inputLanguageKey = "input-language"
     static let outputLanguageKey = "output-language"
     static let fontScaleKey = "font-scale"
+    static let subtitlePlacementKey = "subtitle-placement"
     static let lowLatencyKey = "low-latency-translation"
     static let realtimeTranslationKey = "realtime-translation"
     static let correctionKey = "correction"
@@ -40,6 +41,9 @@ enum ConfigStore {
 
     # 字幕の文字サイズ: 0.5 〜 2.0 (0.1 刻み、既定 1.0)
     font-scale = 1.0
+
+    # 共有ビューの字幕配置: overlay (映像に重ねる) / band (映像下の黒帯に表示して映像と重ねない)
+    subtitle-placement = overlay
 
     # 低遅延翻訳 (lowLatency strategy、対応言語ペアのみ) を優先する: true / false
     low-latency-translation = true
