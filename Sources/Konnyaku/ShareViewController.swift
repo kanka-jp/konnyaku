@@ -18,6 +18,7 @@ final class ShareViewController: NSObject, NSWindowDelegate {
     @ObservationIgnored private var isEngineConfigured = false
     @ObservationIgnored private var reloadGeneration = 0
     @ObservationIgnored private var sourceAspect: CGSize?
+    @ObservationIgnored private var appliedBandHeight: CGFloat = 0
 
     nonisolated static let minContentSize = NSSize(width: 320, height: 180)
     nonisolated static let defaultContentSize = NSSize(width: 960, height: 540)
@@ -141,7 +142,8 @@ final class ShareViewController: NSObject, NSWindowDelegate {
                 onLayoutChanged: { [weak self] in self?.applyPlacementLayout() }
             )
         )
-        contentView.bandHeight = currentBandHeight
+        appliedBandHeight = currentBandHeight
+        contentView.bandHeight = appliedBandHeight
         let styleMask: NSWindow.StyleMask = [.titled, .closable, .miniaturizable, .resizable]
         // 装飾 (タイトルバー) 込みで画面内に収める。window 生成前のため装飾高は class
         // method で求める
@@ -184,11 +186,21 @@ final class ShareViewController: NSObject, NSWindowDelegate {
     }
 
     private func applyPlacementLayout() {
-        guard let contentView else { return }
-        contentView.bandHeight = currentBandHeight
+        guard contentView != nil else { return }
+        // fontScale は overlay 配置では帯に影響しない。帯高が変わらないのに
+        // followSourceAspect を呼ぶと、手動で画面より大きくしたウィンドウが画面内
+        // クランプの再適用で意図せず縮む
+        guard currentBandHeight != appliedBandHeight else { return }
         if let sourceAspect {
             followSourceAspect(sourceAspect)
+        } else {
+            applyBandHeight()
         }
+    }
+
+    private func applyBandHeight() {
+        appliedBandHeight = currentBandHeight
+        contentView?.bandHeight = appliedBandHeight
     }
 
     // contentAspectRatio はユーザーリサイズの制約のみで現フレームを変えないため、
@@ -197,8 +209,8 @@ final class ShareViewController: NSObject, NSWindowDelegate {
     private func followSourceAspect(_ sourceSize: CGSize) {
         sourceAspect = sourceSize
         guard let window else { return }
-        let bandHeight = currentBandHeight
-        contentView?.bandHeight = bandHeight
+        applyBandHeight()
+        let bandHeight = appliedBandHeight
         if bandHeight > 0 {
             // band 分の加算定数は比率で表現できないため、比率制約を外して
             // windowWillResize(_:to:) で「映像部の縦横比 + band」を強制する
@@ -237,8 +249,15 @@ final class ShareViewController: NSObject, NSWindowDelegate {
               let sourceAspect, sourceAspect.width > 1, sourceAspect.height > 1 else {
             return frameSize
         }
+        let ratio = sourceAspect.height / sourceAspect.width
         let chrome = sender.frame.height - sender.contentRect(forFrameRect: sender.frame).height
-        let videoHeight = frameSize.width * sourceAspect.height / sourceAspect.width
+        // 幅が変わらない提案 = 縦方向のドラッグ。幅基準で返すと高さが元に戻り縦リサイズが
+        // 効かなくなるため、このときだけ高さから幅を導出する
+        if abs(frameSize.width - sender.frame.width) < 0.5 {
+            let videoHeight = max(frameSize.height - chrome - bandHeight, 1)
+            return NSSize(width: (videoHeight / ratio).rounded(), height: frameSize.height)
+        }
+        let videoHeight = frameSize.width * ratio
         return NSSize(
             width: frameSize.width,
             height: (videoHeight + bandHeight + chrome).rounded()
