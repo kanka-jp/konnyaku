@@ -1,7 +1,6 @@
 import AppKit
 import AVFoundation
 import Observation
-import ScreenCaptureKit
 import SwiftUI
 
 // Meet 等の「ウィンドウ共有」には他プロセスのオーバーレイが映らないため、キャプチャ映像に
