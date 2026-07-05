@@ -75,9 +75,10 @@ private struct MenuContent: View {
 
         Button(t("menu.settings")) {
             // 設定ウィンドウが既に開いて背面にある場合、SettingsView.onAppear は再発火
-            // しない (再挿入されない) ため、メニュー経路ではここでも activate する
+            // しない (再挿入されない) ため、メニュー経路ではここでも activate + 前面化する
             NSApp.activate()
             openSettings()
+            SettingsWindowPresenter.bringToFront()
         }
 
         Button(t("menu.quit")) {
