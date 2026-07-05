@@ -1,5 +1,6 @@
 import AppKit
 import AVFoundation
+import Observation
 import ScreenCaptureKit
 import SwiftUI
 
