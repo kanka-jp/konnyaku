@@ -252,10 +252,15 @@ final class ShareViewController: NSObject, NSWindowDelegate {
         let ratio = sourceAspect.height / sourceAspect.width
         let chrome = sender.frame.height - sender.contentRect(forFrameRect: sender.frame).height
         // 幅が変わらない提案 = 縦方向のドラッグ。幅基準で返すと高さが元に戻り縦リサイズが
-        // 効かなくなるため、このときだけ高さから幅を導出する
+        // 効かなくなるため、このときだけ高さから幅を導出する。返す高さも clamp 後の
+        // 映像高から再構成する (提案高をそのまま返すと、帯高 > 最小 content 高のときに
+        // content が帯より低くなり映像が 0 高になる)
         if abs(frameSize.width - sender.frame.width) < 0.5 {
             let videoHeight = max(frameSize.height - chrome - bandHeight, 1)
-            return NSSize(width: (videoHeight / ratio).rounded(), height: frameSize.height)
+            return NSSize(
+                width: (videoHeight / ratio).rounded(),
+                height: (videoHeight + bandHeight + chrome).rounded()
+            )
         }
         let videoHeight = frameSize.width * ratio
         return NSSize(
