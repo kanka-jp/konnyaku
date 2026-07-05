@@ -39,7 +39,7 @@ final class ShareViewController: NSObject, NSWindowDelegate {
             self?.showStopped(message)
         }
         engine.onSourceSizeChanged = { [weak self] pixelSize in
-            self?.window?.contentAspectRatio = pixelSize
+            self?.followSourceAspect(pixelSize)
         }
     }
 
@@ -107,6 +107,16 @@ final class ShareViewController: NSObject, NSWindowDelegate {
         isOpen = true
     }
 
+    // contentAspectRatio はユーザーリサイズの制約のみで現フレームを変えないため、
+    // それだけでは共有元の縦横比変化後に letterbox が Meet 配信へ残り続ける
+    private func followSourceAspect(_ sourcePixelSize: CGSize) {
+        guard let window else { return }
+        window.contentAspectRatio = sourcePixelSize
+        let currentWidth = window.contentRect(forFrameRect: window.frame).width
+        window.setContentSize(
+            Self.followedContentSize(currentWidth: currentWidth, sourceSize: sourcePixelSize))
+    }
+
     func windowWillClose(_ notification: Notification) {
         guard (notification.object as? NSWindow) === window else { return }
         window = nil
@@ -116,7 +126,8 @@ final class ShareViewController: NSObject, NSWindowDelegate {
     }
 
     // 共有元の縦横比を保ちつつ画面の 6 割程度に収める。共有元より大きくは開かない
-    // (拡大はぼやけるだけで益が無い)。極端に小さい共有元でも操作できる幅は確保する
+    // (拡大はぼやけるだけで益が無い)。contentMinSize (AppKit が強制する) を下回ると
+    // 実ウィンドウが計算値と乖離して縦横比が崩れるため、両辺を満たす共通係数で拡大する
     nonisolated static func initialContentSize(
         sourceSizePoints: CGSize, screenVisibleSize: CGSize
     ) -> NSSize {
@@ -128,9 +139,21 @@ final class ShareViewController: NSObject, NSWindowDelegate {
             screenVisibleSize.height * 0.6 / sourceSizePoints.height,
             1
         )
-        let aspect = sourceSizePoints.height / sourceSizePoints.width
-        let width = max(sourceSizePoints.width * scale, minContentSize.width)
-        return NSSize(width: width, height: width * aspect)
+        let width = sourceSizePoints.width * scale
+        let height = sourceSizePoints.height * scale
+        let boost = max(minContentSize.width / width, minContentSize.height / height, 1)
+        return NSSize(width: width * boost, height: height * boost)
+    }
+
+    // 現在の幅を保って高さを新縦横比に合わせる (最小サイズを下回る場合は縦横比を
+    // 保ったまま両辺を拡大する)
+    nonisolated static func followedContentSize(currentWidth: CGFloat, sourceSize: CGSize) -> NSSize {
+        guard sourceSize.width > 1, sourceSize.height > 1 else { return minContentSize }
+        let aspect = sourceSize.height / sourceSize.width
+        let width = max(currentWidth, minContentSize.width)
+        let height = width * aspect
+        let boost = max(minContentSize.height / height, 1)
+        return NSSize(width: width * boost, height: height * boost)
     }
 }
 
@@ -140,9 +163,38 @@ final class ShareViewState {
     var stoppedMessage: String?
 }
 
+// 映像は専用 view の backing layer として持つ。layer-backed view の layer へ手動
+// addSublayer すると AppKit 管理の subview layer との z 順序が保証されず、字幕が映像の
+// 背後に隠れうるため、順序が保証される subview の重なりで合成する
+final class VideoHostView: NSView {
+    var videoLayer: AVSampleBufferDisplayLayer {
+        layer as! AVSampleBufferDisplayLayer
+    }
+
+    init() {
+        super.init(frame: .zero)
+        wantsLayer = true
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) is not supported")
+    }
+
+    override func makeBackingLayer() -> CALayer {
+        let layer = AVSampleBufferDisplayLayer()
+        layer.videoGravity = .resizeAspect
+        return layer
+    }
+}
+
 final class ShareContentView: NSView {
-    let videoLayer = AVSampleBufferDisplayLayer()
+    private let videoHost = VideoHostView()
     private let overlayHost: NSHostingView<ShareOverlayView>
+
+    var videoLayer: AVSampleBufferDisplayLayer {
+        videoHost.videoLayer
+    }
 
     init(
         state: CaptionState,
@@ -159,8 +211,7 @@ final class ShareContentView: NSView {
         super.init(frame: .zero)
         wantsLayer = true
         layer?.backgroundColor = NSColor.black.cgColor
-        videoLayer.videoGravity = .resizeAspect
-        layer?.addSublayer(videoLayer)
+        addSubview(videoHost)
         addSubview(overlayHost)
     }
 
@@ -171,11 +222,7 @@ final class ShareContentView: NSView {
 
     override func layout() {
         super.layout()
-        CATransaction.begin()
-        // ウィンドウリサイズへの追従で映像フレームが暗黙アニメーションで遅れて動くのを防ぐ
-        CATransaction.setDisableActions(true)
-        videoLayer.frame = bounds
-        CATransaction.commit()
+        videoHost.frame = bounds
         overlayHost.frame = bounds
     }
 }

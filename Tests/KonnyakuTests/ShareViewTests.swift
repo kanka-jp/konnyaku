@@ -35,13 +35,15 @@ struct ShareViewControllerTests {
     }
 
     @Test
-    func initialContentSizeEnforcesMinimumWidthForTinySource() {
+    func initialContentSizeEnforcesContentMinSizePreservingAspect() {
+        // 200x100pt: 幅基準 (320) だと高さ 160 < contentMinSize.height (180) で AppKit の
+        // 最小サイズ強制により縦横比が崩れるため、高さ基準の 1.8 倍で 360x180 になる
         let size = ShareViewController.initialContentSize(
             sourceSizePoints: CGSize(width: 200, height: 100),
             screenVisibleSize: CGSize(width: 1500, height: 1000)
         )
-        #expect(size.width == ShareViewController.minContentSize.width)
-        #expect(abs(size.width / size.height - 2.0) < 0.001)
+        #expect(size == NSSize(width: 360, height: 180))
+        #expect(size.height >= ShareViewController.minContentSize.height)
     }
 
     @Test
@@ -51,6 +53,21 @@ struct ShareViewControllerTests {
             screenVisibleSize: CGSize(width: 1500, height: 1000)
         )
         #expect(size == NSSize(width: 960, height: 540))
+    }
+
+    @Test
+    func followedContentSizeKeepsWidthAndAdjustsHeightToNewAspect() {
+        let size = ShareViewController.followedContentSize(
+            currentWidth: 800, sourceSize: CGSize(width: 1600, height: 1000))
+        #expect(size == NSSize(width: 800, height: 500))
+    }
+
+    @Test
+    func followedContentSizeEnforcesMinHeightPreservingAspect() {
+        // 幅 400 のまま高さを 4:1 に合わせると 100 < 180 のため、縦横比を保って両辺拡大
+        let size = ShareViewController.followedContentSize(
+            currentWidth: 400, sourceSize: CGSize(width: 4000, height: 1000))
+        #expect(size == NSSize(width: 720, height: 180))
     }
 }
 

@@ -15,11 +15,18 @@ final class WindowCaptureEngine: NSObject {
     private var isObserverRegistered = false
     private let sampleQueue = DispatchQueue(label: "jp.kanka.konnyaku.capture")
     private var lastRequestedPixelSize = CGSize.zero
+    // startCapture / stop のたびに進める世代番号。await 中に開始・停止が重なった場合や
+    // 置き換え済み旧 stream からの遅延イベントを stale として無効化する (旧 stream の
+    // 孤児化・現行状態の誤破棄の防止)
+    private var captureGeneration = 0
+    private var consecutiveConfigUpdateFailures = 0
 
     nonisolated static let framesPerSecond: CMTimeScale = 30
     // SCK が受け付ける実用上限で config サイズを抑える (異常値でのストリーム失敗防止)
     nonisolated static let maxStreamDimension: CGFloat = 4096
     nonisolated static let minStreamDimension: CGFloat = 64
+    // updateConfiguration が連続で失敗し続ける環境での 30fps リトライ暴走を打ち切る上限
+    nonisolated static let maxConsecutiveConfigUpdateFailures = 3
     // SCStreamConfiguration.backgroundColor は unowned(unsafe) のため、一時オブジェクトを
     // 渡すと即解放される。寿命を static で保証する
     private nonisolated static let streamBackgroundColor = CGColor(gray: 0, alpha: 1)
@@ -42,6 +49,9 @@ final class WindowCaptureEngine: NSObject {
     }
 
     func startCapture(with filter: SCContentFilter, renderer: AVSampleBufferVideoRenderer) async {
+        captureGeneration += 1
+        let generation = captureGeneration
+        consecutiveConfigUpdateFailures = 0
         // 共有元の選び直しはストリームを作り直す (サイズ・フレーム状態のリセットを新規
         // ストリームに一本化する)
         if let oldStream = stream {
@@ -55,9 +65,9 @@ final class WindowCaptureEngine: NSObject {
         )
         lastRequestedPixelSize = pixelSize
         let sink = CaptureFrameSink(renderer: renderer) { [weak self] desired in
-            Task { @MainActor in self?.followSourceResize(toPixelSize: desired) }
+            Task { @MainActor in self?.followSourceResize(toPixelSize: desired, generation: generation) }
         } onStopped: { [weak self] error in
-            Task { @MainActor in self?.handleStreamStopped(error) }
+            Task { @MainActor in self?.handleStreamStopped(error, generation: generation) }
         }
         let stream = SCStream(filter: filter, configuration: Self.makeConfiguration(pixelSize: pixelSize), delegate: sink)
         do {
@@ -65,7 +75,14 @@ final class WindowCaptureEngine: NSObject {
             try await stream.startCapture()
         } catch {
             debugLog("capture start failed: \(error)")
-            onStopped?("\(t("shareview.capture_failed")): \(error.localizedDescription)")
+            if generation == captureGeneration {
+                onStopped?("\(t("shareview.capture_failed")): \(error.localizedDescription)")
+            }
+            return
+        }
+        // await 中に別の開始・停止が走っていたら据えずに畳む (孤児ストリーム防止)
+        guard generation == captureGeneration else {
+            try? await stream.stopCapture()
             return
         }
         self.sink = sink
@@ -73,6 +90,7 @@ final class WindowCaptureEngine: NSObject {
     }
 
     func stop() async {
+        captureGeneration += 1
         SCContentSharingPicker.shared.isActive = false
         guard let stream else { return }
         self.stream = nil
@@ -93,22 +111,35 @@ final class WindowCaptureEngine: NSObject {
 
     // 共有元ウィンドウのリサイズで native サイズと config が乖離したら作り直さず
     // updateConfiguration で追従する (バッファサイズが変わり余白・解像度劣化が解消される)
-    private func followSourceResize(toPixelSize desired: CGSize) {
-        guard let stream, desired != lastRequestedPixelSize else { return }
+    private func followSourceResize(toPixelSize desired: CGSize, generation: Int) {
+        guard generation == captureGeneration, let stream,
+              desired != lastRequestedPixelSize else { return }
         lastRequestedPixelSize = desired
         onSourceSizeChanged?(desired)
         Task {
             do {
                 try await stream.updateConfiguration(Self.makeConfiguration(pixelSize: desired))
+                consecutiveConfigUpdateFailures = 0
             } catch {
                 debugLog("updateConfiguration failed: \(error)")
+                // dedup 状態 (lastRequested / sink の lastNotified) が進んだままだと追従が
+                // 恒久停止するため巻き戻し、次フレームの通知で再試行させる (上限つき)
+                guard generation == captureGeneration else { return }
+                consecutiveConfigUpdateFailures += 1
+                if consecutiveConfigUpdateFailures < Self.maxConsecutiveConfigUpdateFailures {
+                    lastRequestedPixelSize = .zero
+                    sampleQueue.async { [weak sink = self.sink] in
+                        sink?.resetNotifiedSize()
+                    }
+                }
             }
         }
     }
 
-    private func handleStreamStopped(_ error: Error) {
-        // stop() 起点 (ユーザーが共有ビューを閉じた) の停止は通知しない
-        guard stream != nil else { return }
+    private func handleStreamStopped(_ error: Error, generation: Int) {
+        // stop() 起点 (ユーザーが共有ビューを閉じた) の停止と、置き換え済み旧 stream の
+        // 遅延エラーは通知しない (後者は現行キャプチャの状態を誤って破棄するため)
+        guard generation == captureGeneration, stream != nil else { return }
         debugLog("capture stream stopped: \(error)")
         stream = nil
         sink = nil
@@ -190,6 +221,11 @@ private final class CaptureFrameSink: NSObject, SCStreamOutput, SCStreamDelegate
     private let onStopped: @Sendable (Error) -> Void
     // sampleHandlerQueue (直列) 上でのみ読み書きする
     private var lastNotifiedSize = CGSize.zero
+
+    // sampleHandlerQueue 上で呼ぶこと (didOutputSampleBuffer と同じ直列文脈)
+    func resetNotifiedSize() {
+        lastNotifiedSize = .zero
+    }
 
     init(
         renderer: AVSampleBufferVideoRenderer,
