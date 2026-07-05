@@ -41,12 +41,13 @@ struct ShareViewControllerTests {
     }
 
     @Test
-    func followedContentSizeMinHeightBoostAccountsForBandHeight() {
-        // 帯込みで 80 + 60 = 140 < 180 のため、映像部のみを拡大して最小高を満たす
+    func followedContentSizeMinHeightBoostAppliesToVideoPortion() {
+        // 映像部 80 < 180 のため映像部が最小高を満たすまで拡大する (合計 180 を下限に
+        // すると contentMinSize = 180 + 帯高 の AppKit クランプと食い違う)
         let size = ShareViewController.followedContentSize(
             currentWidth: 320, sourceSize: CGSize(width: 4000, height: 1000),
             screenVisibleSize: CGSize(width: 1500, height: 1000), extraHeight: 60)
-        #expect(size == NSSize(width: 480, height: 180))
+        #expect(size == NSSize(width: 720, height: 240))
     }
 
     @Test

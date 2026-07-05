@@ -297,8 +297,11 @@ final class ShareViewController: NSObject, NSWindowDelegate {
         guard sourceSize.width > 1, sourceSize.height > 1 else { return minContentSize }
         let aspect = sourceSize.height / sourceSize.width
         var width = max(currentWidth, minContentSize.width)
-        if width * aspect + extraHeight < minContentSize.height {
-            width = (minContentSize.height - extraHeight) / aspect
+        // 最小高は映像部単体に課す (contentMinSize = minContentSize.height + 帯高と同じ
+        // 定義。合計高 180 を下限にすると AppKit の contentMinSize クランプと食い違い、
+        // クランプ後のサイズが映像の縦横比とずれる)
+        if width * aspect < minContentSize.height {
+            width = minContentSize.height / aspect
         }
         if screenVisibleSize.width > 1, screenVisibleSize.height > 1 {
             width = min(
