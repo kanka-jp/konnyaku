@@ -286,6 +286,9 @@ final class ShareViewController: NSObject, NSWindowDelegate {
         contentView = nil
         isOpen = false
         sourceAspect = nil
+        // stop() の async 実行を待たず同期で世代を進める (close 直後の再オープンで、
+        // queued 済みの旧サイズ通知が新ウィンドウへ適用されるのを防ぐ)
+        engine.invalidate()
         Task { await engine.stop() }
     }
 

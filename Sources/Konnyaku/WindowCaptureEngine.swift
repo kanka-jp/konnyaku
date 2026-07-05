@@ -174,6 +174,12 @@ final class WindowCaptureEngine: NSObject {
         self.stream = stream
     }
 
+    // 同期的に世代を進めて queued 済みイベントを即 stale 化する (stop() は async のため、
+    // close 直後の再オープンまでに世代が進まず旧イベントが新セッションへ届く隙間がある)
+    func invalidate() {
+        captureGeneration += 1
+    }
+
     func stop() async {
         captureGeneration += 1
         guard let stream else { return }
