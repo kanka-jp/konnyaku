@@ -278,7 +278,8 @@ final class ShareViewController: NSObject, NSWindowDelegate {
         // 引き上げて恒常的な letterbox になる)
         var width = frameSize.width
         if width * ratio < Self.minContentSize.height {
-            width = (Self.minContentSize.height / ratio).rounded()
+            // 切り上げ丸め: 最近接丸めだと丸め後の幅 × ratio が 180 を僅かに割る縦横比が残る
+            width = (Self.minContentSize.height / ratio).rounded(.up)
         }
         return NSSize(
             width: width,
