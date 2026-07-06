@@ -144,7 +144,9 @@ struct SegmentationEvaluationTests {
 
     struct ReplayResult {
         var finals: [FinalSegment] = []
-        // final ごとに、その final 到着までに観測した volatile テキスト列 (erasure 計算用)
+        // final ごとに、その final 到着までに観測した volatile テキスト列 + 末尾に
+        // 置き換わる final 自身 (erasure 計算用。final は最後の volatile 表示を置き換える
+        // ため、確定時の仮説修正による書き換えも表示列の flicker に含める)
         var volatileRuns: [[String]] = []
     }
 
@@ -210,7 +212,7 @@ struct SegmentationEvaluationTests {
                         audioEnd: range?.end,
                         wallClockArrival: arrival
                     ))
-                    result.volatileRuns.append(currentVolatiles)
+                    result.volatileRuns.append(currentVolatiles + [text])
                     currentVolatiles = []
                 } else {
                     // production は全 volatile を表示する (翻訳へ流す最小長 filter は

@@ -88,15 +88,18 @@ enum EvalAudio {
             if buffer.frameLength == 0 {
                 break
             }
+            if pacedRealtime {
+                // live の tap はバッファ取得完了後 (= バッファ末尾の時刻) に届くため、
+                // 先に実時間ぶん待ってから yield する (yield → sleep の順だと解析が
+                // live より最大 1 バッファ分先行し、確定遅延が過小計上される)
+                let seconds = Double(buffer.frameLength) / fileFormat.sampleRate
+                try await Task.sleep(for: .seconds(seconds))
+            }
             if let converted = AudioCaptureEngine.convert(buffer, with: converter, to: analyzerFormat) {
                 continuation.yield(AnalyzerInput(buffer: converted))
             } else {
                 // 黙殺すると timing / CER 計測が静かに歪むため可視化する (best-effort 続行)
                 print("EvalAudio.feed: dropped unconvertible buffer at frame \(file.framePosition)")
-            }
-            if pacedRealtime {
-                let seconds = Double(buffer.frameLength) / fileFormat.sampleRate
-                try await Task.sleep(for: .seconds(seconds))
             }
         }
     }
