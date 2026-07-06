@@ -140,7 +140,7 @@ SwiftPM executable + `make app` で `.app` bundle を組み立てる (Xcode プ�
 
 評価値の絶対値をコミット済み baseline と比較する回帰 gate は置かない。Speech / Translation のモデルは OS アセットとして帯域外更新され、絶対値の変動が実装の良し悪しと区別できないため。セグメンテーション改善 PR は**同一 run・同一音声・同一モデルでのポリシー間差分**を効果の根拠として PR description に貼る。例外はハーネス自壊検知の assert (finals 非空・CER < 0.30) のみ — この閾値は品質 gate ではなく、実測 baseline CER (1-13%) の数倍に置いた粗い上限で、モデル drift でなく replay 配線の破損 (誤った音声・セグメント欠落等) だけを捕捉する。
 
-セグメンテーション評価の音声は常に**実時間ペーシング**で流す (run 時間 ≈ policy 数 × 合計 audio 長)。faster-than-realtime で流し込むと、強制確定の `finalize(through:)` が全 audio 解析済み後に着地して発話全体が 1 セグメントに潰れ、live の区切り挙動を再現できないことを実測済み。区切り判定は volatile の伸びと解析位置の実時間の競走で決まるため、ここだけは wall-clock の再現が正確性の前提になる。
+セグメンテーション評価の音声は常に**実時間ペーシング**で流す (run 時間 ≈ policy 数 × 全 monologue の合計 audio 長 + 翻訳時間。現状 1 policy で 4 分弱)。faster-than-realtime で流し込むと、強制確定の `finalize(through:)` が全 audio 解析済み後に着地して発話全体が 1 セグメントに潰れ、live の区切り挙動を再現できないことを実測済み。区切り判定は volatile の伸びと解析位置の実時間の競走で決まるため、ここだけは wall-clock の再現が正確性の前提になる。
 
 ## References
 

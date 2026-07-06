@@ -418,12 +418,14 @@ struct SegmentationEvaluationTests {
                 }
 
                 // 追従訳の flicker: volatile 列を drop なしで逐次翻訳した表示列の erasure。
-                // production が翻訳へ流す最小長未満を除き、連続重複は表示が変わらないため除外する
+                // production が翻訳へ流す最小長未満の volatile を除き (run 末尾の final は
+                // 長さ不問で翻訳されるため対象外)、連続重複は表示が変わらないため除外する
                 var erased = 0
                 for run in replay.volatileRuns {
                     var deduped: [String] = []
-                    for text in run
-                    where text.count >= CaptionPipeline.minVolatileTranslationLength
+                    for (index, text) in run.enumerated()
+                    where (index == run.count - 1
+                        || text.count >= CaptionPipeline.minVolatileTranslationLength)
                         && text != deduped.last
                     {
                         deduped.append(text)
