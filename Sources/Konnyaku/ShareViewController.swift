@@ -228,8 +228,11 @@ final class ShareViewController: NSObject, NSWindowDelegate {
         let bandHeight = appliedBandHeight
         if bandHeight > 0 {
             // band 分の加算定数は比率で表現できないため、比率制約を外して
-            // windowWillResize(_:to:) で「映像部の縦横比 + band」を強制する
-            window.contentAspectRatio = .zero
+            // windowWillResize(_:to:) で「映像部の縦横比 + band」を強制する。
+            // 解除に contentAspectRatio = .zero を明示代入すると枠ドラッグリサイズで
+            // AppKit 内部が EXC_BREAKPOINT で落ちるため ( https://github.com/libsdl-org/SDL/issues/14229 )、
+            // 排他属性の resize increments 設定で打ち消す
+            window.contentResizeIncrements = NSSize(width: 1, height: 1)
         } else {
             window.contentAspectRatio = sourceSize
         }
