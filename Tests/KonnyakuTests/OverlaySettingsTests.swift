@@ -62,7 +62,7 @@ struct OverlaySettingsTests {
         #expect(OverlaySettings(config: ["subtitle-placement": "band"]).subtitlePlacement == .band)
         #expect(OverlaySettings(config: ["subtitle-placement": "overlay"]).subtitlePlacement == .overlay)
         // 手編集の不正値・未設定は overlay に倒す (config は手編集を許容する仕様)
-        #expect(OverlaySettings(config: ["subtitle-placement": "bottom"]).subtitlePlacement == .overlay)
+        #expect(OverlaySettings(config: ["subtitle-placement": "invalid"]).subtitlePlacement == .overlay)
         #expect(OverlaySettings(config: [:]).subtitlePlacement == .overlay)
     }
 
