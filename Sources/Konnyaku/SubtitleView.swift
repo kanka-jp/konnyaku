@@ -3,6 +3,9 @@ import SwiftUI
 
 struct SubtitleView: View {
     private static let volatileOpacity: Double = 0.65
+    // ロールアップ 1 点あたりの表示滞在時間は containerHeight / speed。等倍で毎秒約
+    // 2 行 (60pt) 進む速さなら読み流しと追いつきの両立が取れる
+    private static let revealPointsPerSecond: CGFloat = 60
 
     let state: CaptionState
     let settings: OverlaySettings
@@ -15,6 +18,13 @@ struct SubtitleView: View {
     var alignsToTop = false
     let onFinishMoving: () -> Void
 
+    @State private var revealOffset: CGFloat = 0
+    @State private var contentHeight: CGFloat = 0
+    @State private var containerSize: CGSize = .zero
+    // パネルリサイズ中は折り返し起因で高さが跳ねるため、幅が動いた直後の高さ変化を
+    // ロールアップ発火から除外する判定に使う
+    @State private var measuredContainerWidth: CGFloat = 0
+
     private var isAdjusting: Bool {
         settings.isMovable && showsAdjustmentUI
     }
@@ -25,16 +35,25 @@ struct SubtitleView: View {
         // 下端の最新行から溢れて「いま話している内容」が見えなくなる
         VStack(spacing: 8) {
             if !alignsToTop {
-                Spacer(minLength: 0)
                 sourceBlock
                 translationBlock
             } else {
                 translationBlock
                 sourceBlock
-                Spacer(minLength: 0)
             }
         }
+        .offset(y: revealOffset)
+        .onGeometryChange(for: CGFloat.self) { proxy in
+            proxy.size.height
+        } action: { newHeight in
+            handleContentHeightChange(newHeight)
+        }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignsToTop ? .top : .bottom)
+        .onGeometryChange(for: CGSize.self) { proxy in
+            proxy.size
+        } action: { newSize in
+            containerSize = newSize
+        }
         .overlay {
             if isAdjusting {
                 RoundedRectangle(cornerRadius: 12)
@@ -85,6 +104,38 @@ struct SubtitleView: View {
         alignsToTop ? lines.reversed() : lines
     }
 
+    // 表示高を超える確定文が一度に届くと bottom 寄せでは文頭が一瞬も見えないため、
+    // 追加分だけ下へずらした状態 (= 追加直前と同じ見え方) から等速で流し込む (ロールアップ)
+    nonisolated static func revealScrollDistance(
+        previousContentHeight: CGFloat,
+        contentHeight: CGFloat,
+        containerHeight: CGFloat
+    ) -> CGFloat? {
+        let delta = contentHeight - previousContentHeight
+        guard containerHeight > 0, delta > containerHeight else { return nil }
+        return delta
+    }
+
+    private func handleContentHeightChange(_ newHeight: CGFloat) {
+        let widthStable = measuredContainerWidth == containerSize.width
+        defer {
+            contentHeight = newHeight
+            measuredContainerWidth = containerSize.width
+        }
+        guard widthStable,
+            let distance = Self.revealScrollDistance(
+                previousContentHeight: contentHeight,
+                contentHeight: newHeight,
+                containerHeight: containerSize.height
+            )
+        else { return }
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) { revealOffset = distance }
+        let duration = distance / (Self.revealPointsPerSecond * settings.fontScale)
+        withAnimation(.linear(duration: duration)) { revealOffset = 0 }
+    }
+
     // 位置調整中に字幕が流れていないと枠線だけで実際の見え方が分からないため
     var showsPreview: Bool {
         isAdjusting && state.sourceDisplayLines.isEmpty && state.translationDisplayLines.isEmpty
@@ -112,9 +163,9 @@ struct SubtitleView: View {
                     .foregroundStyle(color)
                     .opacity(line.kind == .volatile ? Self.volatileOpacity : 1)
                     .shadow(color: .black.opacity(0.8), radius: 1, x: 0, y: 1)
-                    .lineLimit(2)
-                    // 折り返し超過時は話し続けている最新語 (末尾) を優先表示する
-                    .truncationMode(.head)
+                    // 縦の fixedSize が無いと高さ不足時に Text が縦圧縮されて「…」省略される。
+                    // 全高を確保し、超過分は bottom 寄せの上端 (古い側) から隠す
+                    .fixedSize(horizontal: false, vertical: true)
                     .multilineTextAlignment(.center)
             }
         }
