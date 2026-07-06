@@ -132,6 +132,9 @@ struct SegmentationEvaluationTests {
 
     struct FinalSegment {
         let text: String
+        // force 要求 in-flight 中に到着した final を true とする帰属 heuristic。
+        // SpeechAnalyzer は final の発生要因を返さないため、要求直後の自然 final を
+        // forced と数えうる (全 policy 同条件のため相対比較は有効)
         let forced: Bool
         let audioStart: Double?
         let audioEnd: Double?
@@ -299,7 +302,9 @@ struct SegmentationEvaluationTests {
                     session: translationAvailable ? session : nil)
                 records.append(record)
 
-                // ハーネス自壊検知のみ assert する (品質の絶対値 gate は置かない)
+                // ハーネス自壊検知のみ assert する (品質の絶対値 gate は置かない。
+                // 0.30 は実測 baseline CER 0.01-0.13 の数倍で、モデル drift でなく
+                // 配線破損 — 誤った音声・セグメント欠落等 — のみ捕捉する粗い上限)
                 #expect(!replay.finals.isEmpty, "no finals for \(monologue.id) / \(policy)")
                 #expect(
                     record.cer < 0.30,
