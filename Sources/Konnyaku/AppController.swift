@@ -224,10 +224,14 @@ final class AppController {
 
     func openShareView() {
         shareView.open(state: state, settings: settings, languages: languages)
+        // observation の発火は async のため、開閉の主経路では isOpen 反映後に同期でも
+        // 適用し、二重表示 (open 時) / 非表示 (close 時) が一瞬残るのを避ける
+        overlay.setSuppressed(shouldSuppressOverlay)
     }
 
     func closeShareView() {
         shareView.close()
+        overlay.setSuppressed(shouldSuppressOverlay)
     }
 
     private func showOverlay() {

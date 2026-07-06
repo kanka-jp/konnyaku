@@ -12,7 +12,8 @@ final class OverlayController: NSObject, NSWindowDelegate {
     // 幅は字幕 2 行が読める最低限、高さは panelHeight の minimumHeight と揃える
     nonisolated static let minPanelSize = NSSize(width: 320, height: 200)
 
-    private var panel: AdjustablePanel?
+    // setter は本 controller に閉じる (getter はテストが抑制契約を検証するために公開)
+    private(set) var panel: AdjustablePanel?
     private var onFinishMoving: (() -> Void)?
     // 共有ビュー表示中の二重表示回避。パネルは破棄せず表示だけを消し、解除時に
     // 同じ frame のまま即座に戻す (字幕パイプラインは動き続ける)

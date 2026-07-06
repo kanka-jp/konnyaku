@@ -345,6 +345,46 @@ struct OverlayControllerTests {
         #expect(target == secondaryVisible)
     }
 
+    // 共有ビュー表示中の抑制契約: パネルは破棄せず表示だけを消し、解除で同じパネルが
+    // 同じ frame のまま戻る。落ちる場合は共有ビューを閉じても字幕が戻らない (または
+    // hide 相当に退化して解除時の即時復帰が壊れている)
+    @Test @MainActor
+    func setSuppressedHidesPanelWithoutDestroyingItAndRestoresOnRelease() throws {
+        // CI runner に WindowServer が無い場合 show() は panel を作れないため対象外
+        guard NSScreen.main != nil else { return }
+        let controller = OverlayController()
+        controller.show(
+            state: CaptionState(), settings: OverlaySettings(config: [:]),
+            languages: LanguageSettings(config: [:]), onFinishMoving: {}
+        )
+        defer { controller.hide() }
+        let panel = try #require(controller.panel)
+        #expect(panel.isVisible)
+        controller.setSuppressed(true)
+        #expect(!panel.isVisible)
+        #expect(controller.panel === panel)
+        controller.setSuppressed(false)
+        #expect(panel.isVisible)
+    }
+
+    // 抑制中の show() (共有ビューを開いたまま字幕を開始) はパネルを作るだけで前面化せず、
+    // 解除 (共有ビューを閉じる) が前面化する契約
+    @Test @MainActor
+    func showWhileSuppressedCreatesPanelWithoutOrderingFront() throws {
+        guard NSScreen.main != nil else { return }
+        let controller = OverlayController()
+        controller.setSuppressed(true)
+        controller.show(
+            state: CaptionState(), settings: OverlaySettings(config: [:]),
+            languages: LanguageSettings(config: [:]), onFinishMoving: {}
+        )
+        defer { controller.hide() }
+        let panel = try #require(controller.panel)
+        #expect(!panel.isVisible)
+        controller.setSuppressed(false)
+        #expect(panel.isVisible)
+    }
+
     // stale savedOrigin (どのスクリーンとも intersects しない) + 画面幅級 savedSize の
     // fallback 復元経路。unclamped な default frame を返すと margin 分はみ出す regression を防ぐ
     @Test
