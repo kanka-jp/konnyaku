@@ -444,6 +444,11 @@ struct SegmentationEvaluationTests {
                     for text in deduped {
                         translatedRun.append(try await session.translate(text).targetText)
                     }
+                    // 破棄セグメント (空文字終端の run) は production の discardVolatileSegment
+                    // が追従訳表示もクリアするため、訳側の erase-to-empty も終端 "" で計上する
+                    if run.last == "" {
+                        translatedRun.append("")
+                    }
                     erased += EvalMetrics.erasedCharacters(updates: translatedRun)
                 }
                 translatedTexts = translations
