@@ -2,7 +2,7 @@ APP_NAME := Konnyaku
 BUILD_DIR := .build/release
 APP_BUNDLE := dist/$(APP_NAME).app
 
-.PHONY: build app run clean test
+.PHONY: build app run clean test eval
 
 build:
 	swift build -c release
@@ -21,6 +21,11 @@ run: app
 
 test:
 	swift test
+
+# ローカル専用の定量評価 (Speech / Translation / Apple Intelligence モデル要)。
+# CI では実行しない (docs/DESIGN.md「定量評価ハーネス」参照)
+eval:
+	KONNYAKU_EVAL=1 swift test --filter 'TranscriptionEvaluation|SegmentationEvaluation'
 
 clean:
 	rm -rf .build dist

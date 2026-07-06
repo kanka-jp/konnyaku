@@ -93,7 +93,7 @@ struct TranscriptionEvaluationTests {
 
         for sentence in Self.corpus {
             let audioURL = audioDirectory.appendingPathComponent("\(sentence.id).aiff")
-            try Self.synthesize(sentence.spoken, to: audioURL)
+            try EvalAudio.synthesize(sentence.spoken, to: audioURL)
 
             let fast = try await Self.transcribe(audioURL, fastResults: true, contextualTerms: [])
             let fastWithVocabulary = try await Self.transcribe(
@@ -169,21 +169,6 @@ struct TranscriptionEvaluationTests {
         print("===== KONNYAKU_EVAL 終了 =====")
     }
 
-    private struct SpeechSynthesisFailed: Error {
-        let exitCode: Int32
-    }
-
-    private static func synthesize(_ text: String, to url: URL) throws {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/say")
-        process.arguments = ["-v", "Kyoko", "-o", url.path, text]
-        try process.run()
-        process.waitUntilExit()
-        guard process.terminationStatus == 0 else {
-            throw SpeechSynthesisFailed(exitCode: process.terminationStatus)
-        }
-    }
-
     // アプリ本体と同じ「AsyncStream + init(analysisContext:) + AVAudioConverter」経路で
     // ファイルを流し込む (プロダクション経路の忠実な再現)
     private static func transcribe(
@@ -232,23 +217,7 @@ struct TranscriptionEvaluationTests {
             return output
         }
 
-        let file = try AVAudioFile(forReading: url)
-        let fileFormat = file.processingFormat
-        guard let converter = AVAudioConverter(from: fileFormat, to: analyzerFormat) else {
-            throw KonnyakuError.audioConverterUnavailable
-        }
-        while file.framePosition < file.length {
-            guard let buffer = AVAudioPCMBuffer(pcmFormat: fileFormat, frameCapacity: 8192) else {
-                throw KonnyakuError.audioConverterUnavailable
-            }
-            try file.read(into: buffer)
-            if buffer.frameLength == 0 {
-                break
-            }
-            if let converted = AudioCaptureEngine.convert(buffer, with: converter, to: analyzerFormat) {
-                continuation.yield(AnalyzerInput(buffer: converted))
-            }
-        }
+        try await EvalAudio.feed(url: url, into: continuation, analyzerFormat: analyzerFormat)
         continuation.finish()
         try await analyzer.finalizeAndFinishThroughEndOfInput()
         return try await collector.value
@@ -257,28 +226,8 @@ struct TranscriptionEvaluationTests {
     // 表記ゆれ (句読点・空白・全半角) を正規化した文字列同士の Levenshtein 距離。
     // 返り値は (編集距離, 正解文字数) で CER = 編集距離 / 正解文字数
     private static func editStats(truth: String, hypothesis: String) -> (Int, Int) {
-        let normalizedTruth = normalize(truth)
-        let normalizedHypothesis = normalize(hypothesis)
-        return (levenshtein(normalizedTruth, normalizedHypothesis), normalizedTruth.count)
-    }
-
-    private static func normalize(_ text: String) -> [Character] {
-        Array(text.precomposedStringWithCompatibilityMapping.filter { $0.isLetter || $0.isNumber })
-    }
-
-    private static func levenshtein(_ a: [Character], _ b: [Character]) -> Int {
-        if a.isEmpty { return b.count }
-        if b.isEmpty { return a.count }
-        var previous = Array(0...b.count)
-        var current = [Int](repeating: 0, count: b.count + 1)
-        for i in 1...a.count {
-            current[0] = i
-            for j in 1...b.count {
-                let substitution = previous[j - 1] + (a[i - 1] == b[j - 1] ? 0 : 1)
-                current[j] = min(previous[j] + 1, current[j - 1] + 1, substitution)
-            }
-            swap(&previous, &current)
-        }
-        return previous[b.count]
+        let normalizedTruth = EvalMetrics.normalize(truth)
+        let normalizedHypothesis = EvalMetrics.normalize(hypothesis)
+        return (EvalMetrics.levenshtein(normalizedTruth, normalizedHypothesis), normalizedTruth.count)
     }
 }

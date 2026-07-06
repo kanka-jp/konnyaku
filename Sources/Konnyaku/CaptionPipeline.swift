@@ -27,6 +27,7 @@ final class CaptionPipeline {
     private var pendingFinalTextsAwaitingCorrectionDrain: [(text: String, generation: Int)] = []
     private var correctionBacklog = 0
     private var segmentThreshold = CaptionPipeline.latinSegmentThreshold
+    private let segmentationPolicy: SegmentationPolicy = .current
     private var forcedFinalizeInFlight = false
 
     init(state: CaptionState, onFailure: @escaping @MainActor () -> Void) {
@@ -35,15 +36,9 @@ final class CaptionPipeline {
     }
 
     // 1 字幕行に収まる程度の文字数。CJK は 1 文字の情報量が大きいため短めに切る
-    private static let cjkSegmentThreshold = 40
-    private static let latinSegmentThreshold = 90
-    // 閾値超過後も句読点が見つからない場合に強制確定を保留する上限 (閾値の倍数)
-    nonisolated private static let forceFinalizeGraceMultiplier = 1.5
-    // 句読点の有無を確認する対象は末尾付近のみ (先頭寄りの句読点で誤って早期確定しないため)
-    nonisolated private static let forceFinalizePunctuationTailWindow = 10
-    nonisolated private static let sentenceBreakPunctuation: Set<Character> = [
-        "、", "。", "，", "．", "！", "？", ",", ".", "!", "?",
-    ]
+    // (private でないのは eval が同じ閾値で replay するため)
+    static let cjkSegmentThreshold = 40
+    static let latinSegmentThreshold = 90
     private static let maxTranslationQueueDepth = 2
 
     func start(
@@ -329,21 +324,11 @@ final class CaptionPipeline {
         }
     }
 
-    // 閾値超過後、末尾付近に句読点があれば区切りとして確定要求する。無ければ閾値の 1.5 倍まで
-    // 保留し Speech 側の自然な final 発火を待つ (純関数・テスト対象)
-    nonisolated static func shouldForceFinalize(text: String, threshold: Int) -> Bool {
-        let count = text.count
-        guard count >= threshold else { return false }
-        let hardLimit = Int(Double(threshold) * forceFinalizeGraceMultiplier)
-        if count >= hardLimit { return true }
-        return text.suffix(forceFinalizePunctuationTailWindow)
-            .contains { sentenceBreakPunctuation.contains($0) }
-    }
-
     // 切れ目なく話し続けると isFinal が届かず翻訳が始まらないため強制確定で文を区切る。
     // 確定結果が届くまで再要求しない (volatile 更新ごとの重複要求を防ぐ)
     private func forceFinalizeIfOverflowing(volatile text: String) {
-        guard !forcedFinalizeInFlight, Self.shouldForceFinalize(text: text, threshold: segmentThreshold)
+        guard !forcedFinalizeInFlight,
+            segmentationPolicy.shouldForceFinalize(text: text, threshold: segmentThreshold)
         else { return }
         forcedFinalizeInFlight = true
         debugLog("force finalize requested (len=\(text.count))")

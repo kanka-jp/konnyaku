@@ -131,6 +131,17 @@ SwiftPM executable + `make app` で `.app` bundle を組み立てる (Xcode プ�
 
 中核が OS フレームワークの結線であり、モック化しても実装の写し鏡にしかならないため、unit test は純粋ロジック (字幕状態管理・文の確定処理) に限定する。CI は GitHub Actions `macos-26` runner で `make test` (swift test) と `make app` (release build + bundle 組み立て) を main への push・pull request・手動トリガー (`workflow_dispatch`) で実行する (public リポジトリのため macOS runner は無課金)。`v*` tag の push で release workflow が test → tag からの version 反映 → app bundle の zip 化 → GitHub Release 作成までを行う (配布物は ad-hoc 署名のまま。notarization は Developer ID 取得の実需要が出てから)。音声認識・翻訳・オーバーレイ表示は実機での手動確認 (mic TCC はユーザー操作が必要)。
 
+## 定量評価ハーネス (KONNYAKU_EVAL)
+
+`make eval` (= `KONNYAKU_EVAL=1 swift test --filter 'TranscriptionEvaluation|SegmentationEvaluation'`) で、macOS 合成音声 (`say -v Kyoko`) を ground truth 付きコーパスとして実 SpeechAnalyzer に replay する定量評価を実行する。ローカル専用で CI では走らせない (runner に Speech / Translation / Apple Intelligence のモデルアセットや音声が無く、ASR の非決定性で赤 CI ノイズになるため)。
+
+- **TranscriptionEvaluationTests**: 認識・AI 補正の CER (文字誤り率) を条件別に比較する
+- **SegmentationEvaluationTests**: 強制確定ポリシー (`SegmentationPolicy`) の全 case を、複数文 monologue コーパス (節単位の parts + 手書き参照訳 + 既知長ポーズ) の同一音声で A/B 比較する。指標は境界 precision/recall/F1 (参照境界 = parts の節区切り)・セグメント長 (文字・audio 秒)・強制確定率・確定遅延 (wall-clock lag)・chrF (確定セグメント逐次翻訳の連結 vs 参照訳、sacrebleu 互換の自前実装)・erasure (volatile 表示の flicker 量)。結果は print レポート + `.claude/tmp/eval-results/` への JSON 出力
+
+評価値の絶対値をコミット済み baseline と比較する回帰 gate は置かない。Speech / Translation のモデルは OS アセットとして帯域外更新され、絶対値の変動が実装の良し悪しと区別できないため。セグメンテーション改善 PR は**同一 run・同一音声・同一モデルでのポリシー間差分**を効果の根拠として PR description に貼る。
+
+セグメンテーション評価の音声は常に**実時間ペーシング**で流す (run 時間 ≈ policy 数 × 合計 audio 長)。faster-than-realtime で流し込むと、強制確定の `finalize(through:)` が全 audio 解析済み後に着地して発話全体が 1 セグメントに潰れ、live の区切り挙動を再現できないことを実測済み。区切り判定は volatile の伸びと解析位置の実時間の競走で決まるため、ここだけは wall-clock の再現が正確性の前提になる。
+
 ## References
 
 - [https://developer.apple.com/documentation/speech/speechanalyzer](https://developer.apple.com/documentation/speech/speechanalyzer)
