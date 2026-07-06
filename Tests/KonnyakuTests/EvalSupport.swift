@@ -51,7 +51,9 @@ enum EvalAudio {
                 try output.write(from: buffer)
             }
             if clip.silenceAfterMs > 0 {
-                let frames = AVAudioFrameCount(format.sampleRate * Double(clip.silenceAfterMs) / 1000)
+                // 切り捨てだと ms がサンプルレートで割り切れないとき無音が sub-sample 短くなる
+                let frames = AVAudioFrameCount(
+                    (format.sampleRate * Double(clip.silenceAfterMs) / 1000).rounded())
                 guard let silence = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frames),
                     let channels = silence.floatChannelData
                 else {
@@ -76,12 +78,12 @@ enum EvalAudio {
         pacedRealtime: Bool = false
     ) async throws {
         let file = try AVAudioFile(forReading: url)
-        let fileFormat = file.processingFormat
-        guard let converter = AVAudioConverter(from: fileFormat, to: analyzerFormat) else {
+        let sourceFormat = file.processingFormat
+        guard let converter = AVAudioConverter(from: sourceFormat, to: analyzerFormat) else {
             throw KonnyakuError.audioConverterUnavailable
         }
         while file.framePosition < file.length {
-            guard let buffer = AVAudioPCMBuffer(pcmFormat: fileFormat, frameCapacity: 8192) else {
+            guard let buffer = AVAudioPCMBuffer(pcmFormat: sourceFormat, frameCapacity: 8192) else {
                 throw KonnyakuError.audioConverterUnavailable
             }
             try file.read(into: buffer)
@@ -92,7 +94,7 @@ enum EvalAudio {
                 // live の tap はバッファ取得完了後 (= バッファ末尾の時刻) に届くため、
                 // 先に実時間ぶん待ってから yield する (yield → sleep の順だと解析が
                 // live より最大 1 バッファ分先行し、確定遅延が過小計上される)
-                let seconds = Double(buffer.frameLength) / fileFormat.sampleRate
+                let seconds = Double(buffer.frameLength) / sourceFormat.sampleRate
                 try await Task.sleep(for: .seconds(seconds))
             }
             if let converted = AudioCaptureEngine.convert(buffer, with: converter, to: analyzerFormat) {
