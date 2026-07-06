@@ -38,6 +38,14 @@ final class OverlaySettings {
         }
     }
 
+    // 視聴者に届く字幕は共有ビュー側に合成されるため、host 側のオーバーレイは二重表示になる
+    var hideOverlayDuringShare: Bool {
+        didSet {
+            ConfigStore.set(
+                String(hideOverlayDuringShare), forKey: ConfigStore.hideOverlayDuringShareKey)
+        }
+    }
+
     var isMovable = false
 
     init(config: [String: String]) {
@@ -47,6 +55,8 @@ final class OverlaySettings {
             .flatMap(SubtitlePlacement.init(rawValue:)) ?? .overlay
         subtitlePosition = config[ConfigStore.subtitlePositionKey]
             .flatMap(SubtitlePosition.init(rawValue:)) ?? .bottom
+        // 未設定 (既存ユーザー含む) は false = 現行挙動 (両方表示) を維持する
+        hideOverlayDuringShare = config[ConfigStore.hideOverlayDuringShareKey] == "true"
     }
 
     private var fontScaleIndex: Int {

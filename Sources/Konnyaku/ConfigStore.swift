@@ -8,6 +8,7 @@ enum ConfigStore {
     static let fontScaleKey = "font-scale"
     static let subtitlePlacementKey = "subtitle-placement"
     static let subtitlePositionKey = "subtitle-position"
+    static let hideOverlayDuringShareKey = "hide-overlay-during-share"
     static let lowLatencyKey = "low-latency-translation"
     static let realtimeTranslationKey = "realtime-translation"
     static let correctionKey = "correction"
@@ -48,6 +49,9 @@ enum ConfigStore {
 
     # 共有ビューの字幕の表示位置: bottom (下) / top (上)
     subtitle-position = bottom
+
+    # 共有ビュー表示中は画面全体のオーバーレイ字幕を隠す (共有ビュー側と二重に見えるのを防ぐ): true / false
+    hide-overlay-during-share = false
 
     # 低遅延翻訳 (lowLatency strategy、対応言語ペアのみ) を優先する: true / false
     low-latency-translation = true

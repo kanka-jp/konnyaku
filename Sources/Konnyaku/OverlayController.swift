@@ -14,6 +14,9 @@ final class OverlayController: NSObject, NSWindowDelegate {
 
     private var panel: AdjustablePanel?
     private var onFinishMoving: (() -> Void)?
+    // 共有ビュー表示中の二重表示回避。パネルは破棄せず表示だけを消し、解除時に
+    // 同じ frame のまま即座に戻す (字幕パイプラインは動き続ける)
+    private var isSuppressed = false
 
     // 最大 8 行 (上下段とも確定 3 行 + 話し中/追従 1 行) 分の基準高さを fontScale に比例させ
     // (等倍では旧固定値 380pt と一致)、拡大時の字幕欠け (下寄せのため上端から欠ける) を軽減する
@@ -98,7 +101,9 @@ final class OverlayController: NSObject, NSWindowDelegate {
     ) {
         self.onFinishMoving = onFinishMoving
         if let panel {
-            panel.orderFrontRegardless()
+            if !isSuppressed {
+                panel.orderFrontRegardless()
+            }
             return
         }
         guard let mainScreen = NSScreen.main else { return }
@@ -133,13 +138,28 @@ final class OverlayController: NSObject, NSWindowDelegate {
                 onFinishMoving: { [weak self] in self?.onFinishMoving?() }
             ))
         panel.delegate = self
-        panel.orderFrontRegardless()
+        // 抑制中の開始 (共有ビューを開いたまま字幕を開始等) はパネルを作るだけに留め、
+        // 解除 (共有ビューを閉じる等) が前面化する
+        if !isSuppressed {
+            panel.orderFrontRegardless()
+        }
         self.panel = panel
     }
 
     func hide() {
         panel?.orderOut(nil)
         panel = nil
+    }
+
+    func setSuppressed(_ suppressed: Bool) {
+        guard suppressed != isSuppressed else { return }
+        isSuppressed = suppressed
+        guard let panel else { return }
+        if suppressed {
+            panel.orderOut(nil)
+        } else {
+            panel.orderFrontRegardless()
+        }
     }
 
     // setFrame が発火させる windowDidMove の再保存を defer の削除で打ち消し、
@@ -251,7 +271,9 @@ final class OverlayController: NSObject, NSWindowDelegate {
                 // (直接呼ばず別 window を key にせよ)。canBecomeKey が既に false の
                 // ため、再表示で AppKit に key の再評価をさせて安全に手放す
                 panel.orderOut(nil)
-                panel.orderFrontRegardless()
+                if !isSuppressed {
+                    panel.orderFrontRegardless()
+                }
             }
         }
     }
