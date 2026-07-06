@@ -74,4 +74,13 @@ struct OverlaySettingsTests {
         #expect(OverlaySettings(config: ["subtitle-position": "middle"]).subtitlePosition == .bottom)
         #expect(OverlaySettings(config: [:]).subtitlePosition == .bottom)
     }
+
+    @Test
+    func initParsesHideOverlayDuringShareAndDefaultsToFalse() {
+        #expect(OverlaySettings(config: ["hide-overlay-during-share": "true"]).hideOverlayDuringShare)
+        #expect(!OverlaySettings(config: ["hide-overlay-during-share": "false"]).hideOverlayDuringShare)
+        // 未設定・不正値は false = 従来挙動 (両方表示) に倒す (既存ユーザーの挙動を変えない)
+        #expect(!OverlaySettings(config: ["hide-overlay-during-share": "yes"]).hideOverlayDuringShare)
+        #expect(!OverlaySettings(config: [:]).hideOverlayDuringShare)
+    }
 }

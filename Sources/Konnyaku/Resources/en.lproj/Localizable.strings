@@ -45,6 +45,8 @@
 "settings.subtitle_position" = "Share View Subtitle Position";
 "settings.subtitle_position.bottom" = "Bottom";
 "settings.subtitle_position.top" = "Top";
+"settings.hide_overlay_during_share" = "Hide Overlay Subtitles While Share View Is Open";
+"settings.hide_overlay_during_share.help" = "Subtitles are composited into the share view, so hiding the full-screen overlay avoids seeing them twice on your own screen (they stay visible while adjusting position)";
 "settings.correction" = "Refine Transcription with AI";
 "settings.edit_vocabulary" = "Edit Custom Vocabulary…";
 "settings.auto_start" = "Start Subtitles Automatically at Launch";

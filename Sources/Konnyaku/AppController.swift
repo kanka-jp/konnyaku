@@ -84,6 +84,7 @@ final class AppController {
         realtimeTranslationEnabled = config[ConfigStore.realtimeTranslationKey] != "false"
         autoStartEnabled = config[ConfigStore.autoStartKey] != "false"
         observeFontScaleChanges()
+        observeOverlaySuppressionChanges()
     }
 
     // fontScale の変更をオーバーレイ表示中も追従させる (withObservationTracking は
@@ -96,6 +97,24 @@ final class AppController {
                 guard let self else { return }
                 self.overlay.updateFontScale(self.settings.fontScale)
                 self.observeFontScaleChanges()
+            }
+        }
+    }
+
+    // 調整モード中は調整対象のパネルが見えなくなるため、共有ビュー表示中でも隠さない
+    private var shouldSuppressOverlay: Bool {
+        settings.hideOverlayDuringShare && shareView.isOpen && !settings.isMovable
+    }
+
+    // withObservationTracking は one-shot 契約のため、発火のたびに再登録して監視を継続する
+    private func observeOverlaySuppressionChanges() {
+        withObservationTracking {
+            _ = shouldSuppressOverlay
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.overlay.setSuppressed(self.shouldSuppressOverlay)
+                self.observeOverlaySuppressionChanges()
             }
         }
     }
@@ -181,6 +200,9 @@ final class AppController {
 
     func setOverlayMovable(_ movable: Bool) {
         settings.isMovable = movable
+        // observation の発火 (async) を待つと、調整開始時の makeKey が非表示のパネルに
+        // 対して走り key になれないため、抑制の解除/再適用はここで同期的に済ませる
+        overlay.setSuppressed(shouldSuppressOverlay)
         if movable {
             // 停止中でも位置調整できるようにする (SubtitleView がサンプル行を表示する)
             showOverlay()
@@ -202,10 +224,14 @@ final class AppController {
 
     func openShareView() {
         shareView.open(state: state, settings: settings, languages: languages)
+        // observation の発火は async のため、開閉の主経路では isOpen 反映後に同期でも
+        // 適用し、二重表示 (open 時) / 非表示 (close 時) が一瞬残るのを避ける
+        overlay.setSuppressed(shouldSuppressOverlay)
     }
 
     func closeShareView() {
         shareView.close()
+        overlay.setSuppressed(shouldSuppressOverlay)
     }
 
     private func showOverlay() {

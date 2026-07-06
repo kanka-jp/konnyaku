@@ -121,6 +121,18 @@ struct SettingsView: View {
                     Text(t("settings.subtitle_position.top"))
                         .tag(OverlaySettings.SubtitlePosition.top)
                 }
+
+                Toggle(isOn: Binding(
+                    get: { controller.settings.hideOverlayDuringShare },
+                    set: { controller.settings.hideOverlayDuringShare = $0 }
+                )) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(t("settings.hide_overlay_during_share"))
+                        Text(t("settings.hide_overlay_during_share.help"))
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
 
             Section(t("settings.section.correction")) {

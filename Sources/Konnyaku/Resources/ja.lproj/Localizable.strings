@@ -45,6 +45,8 @@
 "settings.subtitle_position" = "共有ビューの字幕の表示位置";
 "settings.subtitle_position.bottom" = "下";
 "settings.subtitle_position.top" = "上";
+"settings.hide_overlay_during_share" = "共有ビュー表示中はオーバーレイ字幕を隠す";
+"settings.hide_overlay_during_share.help" = "字幕は共有ビューに合成されるため、画面全体のオーバーレイを隠すと自分の画面での二重表示を避けられます (位置調整中は表示されます)";
 "settings.correction" = "AI で文字起こしを補正";
 "settings.edit_vocabulary" = "カスタム語彙を編集…";
 "settings.auto_start" = "起動時に字幕を自動で開始";
