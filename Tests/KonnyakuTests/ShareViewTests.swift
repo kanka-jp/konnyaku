@@ -64,6 +64,29 @@ struct ShareViewControllerTests {
         #expect(ShareViewController.bandHeight(fontScale: 1.0) == 160)
         #expect(ShareViewController.bandHeight(fontScale: 2.0) == 320)
     }
+
+    // followSourceAspect の crash 回避は「resize increments の設定が既存の aspect
+    // 制約を打ち消す」排他契約に依存する。契約が崩れると overlay → band 切替で
+    // stale な比率制約が残るため、その検出として固定する
+    @Test @MainActor
+    func settingContentResizeIncrementsCancelsContentAspectRatio() {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 640, height: 360),
+            styleMask: [.titled, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.isReleasedWhenClosed = false
+        window.contentAspectRatio = NSSize(width: 16, height: 9)
+        window.contentResizeIncrements = NSSize(width: 1, height: 1)
+        #expect(window.contentAspectRatio == .zero)
+        // 2 周目 (overlay → band 再切替相当): increments が既に (1, 1) の状態からでも
+        // 再代入が aspect を打ち消すこと (同値 no-op で解除漏れしないこと) を固定する
+        window.contentAspectRatio = NSSize(width: 16, height: 9)
+        #expect(window.contentAspectRatio == NSSize(width: 16, height: 9))
+        window.contentResizeIncrements = NSSize(width: 1, height: 1)
+        #expect(window.contentAspectRatio == .zero)
+    }
 }
 
 struct WindowCaptureEngineTests {
