@@ -22,8 +22,8 @@ struct SubtitleView: View {
     @State private var contentHeight: CGFloat = 0
     @State private var containerSize: CGSize = .zero
     // パネルリサイズ中は折り返し起因で高さが跳ねるため、幅が動いた直後の高さ変化を
-    // ロールアップ発火から除外する判定に使う
-    @State private var measuredContainerWidth: CGFloat = 0
+    // ロールアップ発火から除外する判定に使う (未計測は nil のままにして除外しない)
+    @State private var measuredContainerWidth: CGFloat?
 
     private var isAdjusting: Bool {
         settings.isMovable && showsAdjustmentUI
@@ -105,35 +105,54 @@ struct SubtitleView: View {
     }
 
     // 表示高を超える確定文が一度に届くと bottom 寄せでは文頭が一瞬も見えないため、
-    // 追加分だけ下へずらした状態 (= 追加直前と同じ見え方) から等速で流し込む (ロールアップ)
+    // 追加分だけ下へずらした状態 (= 追加直前と同じ見え方) から等速で流し込む (ロールアップ)。
+    // 幅計測値と不一致 (リサイズ直後) の高さ変化は折り返し起因のため発火しない。
+    // 未計測 (nil) は幅変化ではないので除外しない (初回の一括長文を取りこぼさないため)
     nonisolated static func revealScrollDistance(
         previousContentHeight: CGFloat,
         contentHeight: CGFloat,
-        containerHeight: CGFloat
+        containerSize: CGSize,
+        measuredContainerWidth: CGFloat?
     ) -> CGFloat? {
+        if let measuredContainerWidth, measuredContainerWidth != containerSize.width {
+            return nil
+        }
         let delta = contentHeight - previousContentHeight
-        guard containerHeight > 0, delta > containerHeight else { return nil }
+        guard containerSize.height > 0, delta > containerSize.height else { return nil }
         return delta
     }
 
     private func handleContentHeightChange(_ newHeight: CGFloat) {
-        let widthStable = measuredContainerWidth == containerSize.width
-        defer {
-            contentHeight = newHeight
-            measuredContainerWidth = containerSize.width
-        }
-        guard widthStable,
-            let distance = Self.revealScrollDistance(
+        // 上寄せ (鏡像) は最新行の文頭が常に画面端側に見えるためロールアップ不要で、
+        // 行順反転のまま流すと読み順が末尾→先頭に逆転する。bottom 寄せ時のみ発火する
+        let distance = alignsToTop
+            ? nil
+            : Self.revealScrollDistance(
                 previousContentHeight: contentHeight,
                 contentHeight: newHeight,
-                containerHeight: containerSize.height
+                containerSize: containerSize,
+                measuredContainerWidth: measuredContainerWidth
             )
-        else { return }
+        let shrank = newHeight < contentHeight
+        contentHeight = newHeight
+        measuredContainerWidth = containerSize.width > 0 ? containerSize.width : nil
         var transaction = Transaction()
         transaction.disablesAnimations = true
+        guard let distance else {
+            // ロールアップ進行中に行失効で縮んだ場合、offset が残ると縮んだ内容が
+            // ずれた位置に見え続けるため bottom 寄せへ即時復帰する
+            if shrank {
+                withTransaction(transaction) { revealOffset = 0 }
+            }
+            return
+        }
         withTransaction(transaction) { revealOffset = distance }
         let duration = distance / (Self.revealPointsPerSecond * settings.fontScale)
-        withAnimation(.linear(duration: duration)) { revealOffset = 0 }
+        // 同一更新サイクル内で snap→animate すると最終値 (0) だけが評価されて
+        // アニメーションごと消えうるため、戻しは次サイクルで開始する
+        Task { @MainActor in
+            withAnimation(.linear(duration: duration)) { revealOffset = 0 }
+        }
     }
 
     // 位置調整中に字幕が流れていないと枠線だけで実際の見え方が分からないため
@@ -164,7 +183,7 @@ struct SubtitleView: View {
                     .opacity(line.kind == .volatile ? Self.volatileOpacity : 1)
                     .shadow(color: .black.opacity(0.8), radius: 1, x: 0, y: 1)
                     // 縦の fixedSize が無いと高さ不足時に Text が縦圧縮されて「…」省略される。
-                    // 全高を確保し、超過分は bottom 寄せの上端 (古い側) から隠す
+                    // 全高を確保し、超過分は寄せの反対側 (古い行側) からはみ出して隠す
                     .fixedSize(horizontal: false, vertical: true)
                     .multilineTextAlignment(.center)
             }
