@@ -83,7 +83,9 @@ enum EvalAudio {
             throw KonnyakuError.audioConverterUnavailable
         }
         while file.framePosition < file.length {
-            guard let buffer = AVAudioPCMBuffer(pcmFormat: sourceFormat, frameCapacity: 8192) else {
+            // production tap (AudioCaptureEngine の bufferSize: 4096) と同じ粒度で届ける
+            // (粗いチャンクだと paced 時の配信間隔が live の 2 倍になり lag 計測がずれる)
+            guard let buffer = AVAudioPCMBuffer(pcmFormat: sourceFormat, frameCapacity: 4096) else {
                 throw KonnyakuError.audioConverterUnavailable
             }
             try file.read(into: buffer)
