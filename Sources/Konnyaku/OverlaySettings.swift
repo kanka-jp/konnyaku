@@ -14,6 +14,12 @@ final class OverlaySettings {
         case band
     }
 
+    // 共有ビューでの字幕の表示位置 (画面全体オーバーレイはドラッグで自由配置のため対象外)
+    enum SubtitlePosition: String, CaseIterable {
+        case bottom
+        case top
+    }
+
     var fontScale: Double {
         didSet {
             ConfigStore.set(String(fontScale), forKey: ConfigStore.fontScaleKey)
@@ -26,6 +32,12 @@ final class OverlaySettings {
         }
     }
 
+    var subtitlePosition: SubtitlePosition {
+        didSet {
+            ConfigStore.set(subtitlePosition.rawValue, forKey: ConfigStore.subtitlePositionKey)
+        }
+    }
+
     var isMovable = false
 
     init(config: [String: String]) {
@@ -33,6 +45,8 @@ final class OverlaySettings {
         fontScale = Self.fontScales.contains(saved) ? saved : 1.0
         subtitlePlacement = config[ConfigStore.subtitlePlacementKey]
             .flatMap(SubtitlePlacement.init(rawValue:)) ?? .overlay
+        subtitlePosition = config[ConfigStore.subtitlePositionKey]
+            .flatMap(SubtitlePosition.init(rawValue:)) ?? .bottom
     }
 
     private var fontScaleIndex: Int {

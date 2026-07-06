@@ -144,6 +144,7 @@ final class ShareViewController: NSObject, NSWindowDelegate {
         )
         appliedBandHeight = currentBandHeight
         contentView.bandHeight = appliedBandHeight
+        contentView.bandAtTop = deps.settings.subtitlePosition == .top
         let styleMask: NSWindow.StyleMask = [.titled, .closable, .miniaturizable, .resizable]
         // 装飾 (タイトルバー) 込みで画面内に収める。window 生成前のため装飾高は class
         // method で求める
@@ -189,7 +190,9 @@ final class ShareViewController: NSObject, NSWindowDelegate {
     }
 
     private func applyPlacementLayout() {
-        guard contentView != nil else { return }
+        guard let contentView else { return }
+        // 表示位置 (上/下) は帯高・ウィンドウサイズに影響しないため常時反映してよい
+        contentView.bandAtTop = deps?.settings.subtitlePosition == .top
         // fontScale は overlay 配置では帯に影響しない。帯高が変わらないのに
         // followSourceAspect を呼ぶと、手動で画面より大きくしたウィンドウが画面内
         // クランプの再適用で意図せず縮む
@@ -204,6 +207,7 @@ final class ShareViewController: NSObject, NSWindowDelegate {
     private func applyBandHeight() {
         appliedBandHeight = currentBandHeight
         contentView?.bandHeight = appliedBandHeight
+        contentView?.bandAtTop = deps?.settings.subtitlePosition == .top
         // band 中は帯の分だけ最小 content 高も引き上げる (最小サイズ境界が「映像 0 高」を
         // 許す値にならないように)
         window?.contentMinSize = NSSize(
@@ -398,11 +402,20 @@ final class ShareContentView: NSView {
     private let videoHost = VideoHostView()
     private let overlayHost: NSHostingView<ShareOverlayView>
 
-    // band 配置での字幕帯の高さ (0 = overlay 配置)。映像を帯の分だけ上に詰めて
+    // band 配置での字幕帯の高さ (0 = overlay 配置)。映像を帯の分だけ詰めて
     // 字幕と映像を非重畳にする
     var bandHeight: CGFloat = 0 {
         didSet {
             if bandHeight != oldValue {
+                needsLayout = true
+            }
+        }
+    }
+
+    // subtitle-position = top で帯を映像の上に置く (AppKit 座標系は y=0 が下)
+    var bandAtTop = false {
+        didSet {
+            if bandAtTop != oldValue {
                 needsLayout = true
             }
         }
@@ -439,7 +452,7 @@ final class ShareContentView: NSView {
     override func layout() {
         super.layout()
         videoHost.frame = NSRect(
-            x: 0, y: bandHeight,
+            x: 0, y: bandAtTop ? 0 : bandHeight,
             width: bounds.width, height: max(bounds.height - bandHeight, 0)
         )
         overlayHost.frame = bounds
@@ -456,21 +469,29 @@ struct ShareOverlayView: View {
     var body: some View {
         ZStack {
             if settings.subtitlePlacement == .band {
-                // 帯の高さに収めて映像 (帯より上) と非重畳にする。超過分は古い行から
-                // 隠れる (bottom 寄せ)
+                // 帯の高さに収めて映像と非重畳にする。帯内は位置に関わらず bottom 寄せ
+                // (最新行は末尾 = 下端) — 上寄せにすると超過時の下端クリップで最新行から
+                // 欠けてしまう。bottom 寄せなら常に古い行 (上側) から隠れる
                 VStack(spacing: 0) {
-                    Spacer(minLength: 0)
+                    if settings.subtitlePosition == .bottom {
+                        Spacer(minLength: 0)
+                    }
                     SubtitleView(
                         state: state, settings: settings, languages: languages,
                         showsAdjustmentUI: false, onFinishMoving: {}
                     )
                     .frame(height: ShareViewController.bandHeight(fontScale: settings.fontScale))
                     .clipped()
+                    if settings.subtitlePosition == .top {
+                        Spacer(minLength: 0)
+                    }
                 }
             } else {
                 SubtitleView(
                     state: state, settings: settings, languages: languages,
-                    showsAdjustmentUI: false, onFinishMoving: {}
+                    showsAdjustmentUI: false,
+                    alignsToTop: settings.subtitlePosition == .top,
+                    onFinishMoving: {}
                 )
             }
             if viewState.needsPermission {
@@ -501,9 +522,10 @@ struct ShareOverlayView: View {
                 }
             }
         }
-        // 配置モード・文字サイズの変更を AppKit 側レイアウト (映像領域の分割) と
-        // ウィンドウサイズ制約へ即時反映する
+        // 配置モード・表示位置・文字サイズの変更を AppKit 側レイアウト (映像領域の
+        // 分割) とウィンドウサイズ制約へ即時反映する
         .onChange(of: settings.subtitlePlacement) { actions.onLayoutChanged() }
+        .onChange(of: settings.subtitlePosition) { actions.onLayoutChanged() }
         .onChange(of: settings.fontScale) { actions.onLayoutChanged() }
     }
 }

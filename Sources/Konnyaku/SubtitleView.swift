@@ -10,6 +10,9 @@ struct SubtitleView: View {
     // 共有ビューでは調整モードの枠・操作 UI・プレビュー行を出さない (Meet の視聴者に
     // 映る面に管理 UI を混ぜない)
     var showsAdjustmentUI = true
+    // 共有ビューの subtitle-position = top で上寄せにする (画面全体オーバーレイは
+    // ドラッグで自由配置のため常に既定の下寄せ)
+    var alignsToTop = false
     let onFinishMoving: () -> Void
 
     private var isAdjusting: Bool {
@@ -17,26 +20,21 @@ struct SubtitleView: View {
     }
 
     var body: some View {
+        // 上寄せは下寄せの鏡像 (ブロック順・行順とも反転して最新・最重要の翻訳を画面端
+        // に固定する)。行順を保ったまま上寄せにすると、字幕全体が表示領域を超えたとき
+        // 下端の最新行から溢れて「いま話している内容」が見えなくなる
         VStack(spacing: 8) {
-            Spacer(minLength: 0)
-            if !sourceLines.isEmpty {
-                subtitleBlock(
-                    sourceLines,
-                    size: 22 * settings.fontScale,
-                    weight: .semibold,
-                    color: .white.opacity(0.85)
-                )
-            }
-            if !translationLines.isEmpty {
-                subtitleBlock(
-                    translationLines,
-                    size: 30 * settings.fontScale,
-                    weight: .bold,
-                    color: .white
-                )
+            if !alignsToTop {
+                Spacer(minLength: 0)
+                sourceBlock
+                translationBlock
+            } else {
+                translationBlock
+                sourceBlock
+                Spacer(minLength: 0)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignsToTop ? .top : .bottom)
         .overlay {
             if isAdjusting {
                 RoundedRectangle(cornerRadius: 12)
@@ -56,6 +54,35 @@ struct SubtitleView: View {
                 ResizeCursorTracking()
             }
         }
+    }
+
+    @ViewBuilder
+    private var sourceBlock: some View {
+        if !sourceLines.isEmpty {
+            subtitleBlock(
+                orderedForAlignment(sourceLines),
+                size: 22 * settings.fontScale,
+                weight: .semibold,
+                color: .white.opacity(0.85)
+            )
+        }
+    }
+
+    @ViewBuilder
+    private var translationBlock: some View {
+        if !translationLines.isEmpty {
+            subtitleBlock(
+                orderedForAlignment(translationLines),
+                size: 30 * settings.fontScale,
+                weight: .bold,
+                color: .white
+            )
+        }
+    }
+
+    // 表示行は末尾が最新。上寄せでは最新行が画面端 (上) 側に来るよう反転する
+    private func orderedForAlignment(_ lines: [CaptionState.DisplayLine]) -> [CaptionState.DisplayLine] {
+        alignsToTop ? lines.reversed() : lines
     }
 
     // 位置調整中に字幕が流れていないと枠線だけで実際の見え方が分からないため
