@@ -36,9 +36,10 @@ final class CaptionPipeline {
     }
 
     // 1 字幕行に収まる程度の文字数。CJK は 1 文字の情報量が大きいため短めに切る
-    // (private でないのは eval が同じ閾値で replay するため)
-    static let cjkSegmentThreshold = 40
-    static let latinSegmentThreshold = 90
+    // (private でないのは eval が同じ閾値で replay するため。nonisolated は
+    // MainActor 外の eval helper からの参照用)
+    nonisolated static let cjkSegmentThreshold = 40
+    nonisolated static let latinSegmentThreshold = 90
     private static let maxTranslationQueueDepth = 2
 
     func start(
@@ -270,7 +271,8 @@ final class CaptionPipeline {
     }
 
     // ごく短い話し始めの訳は chatter になるだけなので追従翻訳に流さない
-    private static let minVolatileTranslationLength = 3
+    // (private でないのは eval が同じ閾値で追従訳の erasure を再現するため)
+    nonisolated static let minVolatileTranslationLength = 3
 
     private func yieldVolatileForTranslation(_ text: String) {
         guard text.count >= Self.minVolatileTranslationLength else { return }

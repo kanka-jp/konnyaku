@@ -1,6 +1,7 @@
 import AVFoundation
 import Foundation
 import Speech
+import Synchronization
 import Testing
 import Translation
 
@@ -120,8 +121,14 @@ struct SegmentationEvaluationTests {
 
     // 仮説境界を参照座標へ射影して比較するときの許容窓 (正規化文字数)
     static let boundaryTolerance = 3
-    // 追従訳へ流す volatile の最小長 (CaptionPipeline.minVolatileTranslationLength と対)
-    static let minVolatileLength = 3
+
+    // collector と finalize Task を跨ぐ in-flight flag。production の forcedFinalizeInFlight
+    // (MainActor 隔離) に相当し、finalize 失敗時に解除する契約も揃える
+    private final class ForcedFinalizeFlag: Sendable {
+        private let state = Mutex(false)
+        func get() -> Bool { state.withLock { $0 } }
+        func set(_ newValue: Bool) { state.withLock { $0 = newValue } }
+    }
 
     struct FinalSegment {
         let text: String
@@ -170,18 +177,25 @@ struct SegmentationEvaluationTests {
         let analyzer = SpeechAnalyzer(inputSequence: stream, modules: [transcriber], options: nil)
 
         let replayStart = ContinuousClock.now
+        let forcedInFlight = ForcedFinalizeFlag()
         let collector = Task {
             var result = ReplayResult()
             var currentVolatiles: [String] = []
-            var forcedInFlight = false
             for try await item in transcriber.results {
-                let wasForced = forcedInFlight
+                let wasForced = forcedInFlight.get()
                 if item.isFinal {
-                    forcedInFlight = false
+                    forcedInFlight.set(false)
                 }
                 let text = String(item.text.characters)
                     .trimmingCharacters(in: .whitespacesAndNewlines)
-                guard text.contains(where: { $0.isLetter || $0.isNumber }) else { continue }
+                guard text.contains(where: { $0.isLetter || $0.isNumber }) else {
+                    // 捨てた final でもセグメントは切り替わっている (production の
+                    // discardVolatileSegment と対)。クリアしないと erasure が次セグメントへ漏れる
+                    if item.isFinal {
+                        currentVolatiles = []
+                    }
+                    continue
+                }
                 if item.isFinal {
                     let range = Self.audioRange(of: item.text)
                     let elapsed = (ContinuousClock.now - replayStart).components
@@ -196,17 +210,22 @@ struct SegmentationEvaluationTests {
                     result.volatileRuns.append(currentVolatiles)
                     currentVolatiles = []
                 } else {
-                    if text.count >= Self.minVolatileLength {
-                        currentVolatiles.append(text)
-                    }
-                    if !forcedInFlight,
+                    // production は全 volatile を表示する (翻訳へ流す最小長 filter は
+                    // erasure 計算側で適用する)
+                    currentVolatiles.append(text)
+                    if !forcedInFlight.get(),
                         policy.shouldForceFinalize(text: text, threshold: threshold)
                     {
-                        forcedInFlight = true
-                        // プロダクション同様、結果ループを塞がないよう別 Task で要求する
-                        // (この場で await すると final の消費が止まり deadlock する)。
-                        // 失敗時の flag 解除は省略 (replay では次の自然 final が解除する)
-                        Task { try? await analyzer.finalize(through: nil) }
+                        forcedInFlight.set(true)
+                        // プロダクション同様、結果ループを塞がないよう別 Task で要求し
+                        // (この場で await すると final の消費が止まり deadlock する)、
+                        // 失敗時は flag を解除する (解除しないと以降の強制確定が止まり、
+                        // 次の自然 final が forced 誤計上される)
+                        Task {
+                            if (try? await analyzer.finalize(through: nil)) == nil {
+                                forcedInFlight.set(false)
+                            }
+                        }
                     }
                 }
             }
@@ -385,30 +404,42 @@ struct SegmentationEvaluationTests {
         var translatedTexts: [String]?
         var translationErased: Int?
         if let session {
-            var translations: [String] = []
-            for segment in replay.finals {
-                translations.append(try await session.translate(segment.text).targetText)
-            }
-            translatedTexts = translations
-            chrF = EvalMetrics.chrF(
-                hypothesis: translations.joined(separator: " "),
-                reference: monologue.referenceJoined)
+            do {
+                var translations: [String] = []
+                for segment in replay.finals {
+                    translations.append(try await session.translate(segment.text).targetText)
+                }
 
-            // 追従訳の flicker: volatile 列を drop なしで逐次翻訳した表示列の erasure。
-            // 連続重複は表示が変わらないため除外する
-            var erased = 0
-            for run in replay.volatileRuns {
-                var deduped: [String] = []
-                for text in run where text != deduped.last {
-                    deduped.append(text)
+                // 追従訳の flicker: volatile 列を drop なしで逐次翻訳した表示列の erasure。
+                // production が翻訳へ流す最小長未満を除き、連続重複は表示が変わらないため除外する
+                var erased = 0
+                for run in replay.volatileRuns {
+                    var deduped: [String] = []
+                    for text in run
+                    where text.count >= CaptionPipeline.minVolatileTranslationLength
+                        && text != deduped.last
+                    {
+                        deduped.append(text)
+                    }
+                    var translatedRun: [String] = []
+                    for text in deduped {
+                        translatedRun.append(try await session.translate(text).targetText)
+                    }
+                    erased += EvalMetrics.erasedCharacters(updates: translatedRun)
                 }
-                var translatedRun: [String] = []
-                for text in deduped {
-                    translatedRun.append(try await session.translate(text).targetText)
-                }
-                erased += EvalMetrics.erasedCharacters(updates: translatedRun)
+                translatedTexts = translations
+                chrF = EvalMetrics.chrF(
+                    hypothesis: translations.joined(separator: " "),
+                    reference: monologue.referenceJoined)
+                translationErased = erased
+            } catch {
+                // 長時間 run の途中で翻訳が一時失敗しても当該 record の翻訳系指標だけ欠測に
+                // degrade し、収集済み records (printReport / writeJSON) を失わない
+                print("translation failed mid-run (\(monologue.id) / \(policy)): \(error)")
+                chrF = nil
+                translatedTexts = nil
+                translationErased = nil
             }
-            translationErased = erased
         }
 
         let sourceErased = replay.volatileRuns.reduce(0) {

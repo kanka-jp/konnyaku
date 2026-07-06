@@ -90,6 +90,9 @@ enum EvalAudio {
             }
             if let converted = AudioCaptureEngine.convert(buffer, with: converter, to: analyzerFormat) {
                 continuation.yield(AnalyzerInput(buffer: converted))
+            } else {
+                // 黙殺すると timing / CER 計測が静かに歪むため可視化する (best-effort 続行)
+                print("EvalAudio.feed: dropped unconvertible buffer at frame \(file.framePosition)")
             }
             if pacedRealtime {
                 let seconds = Double(buffer.frameLength) / fileFormat.sampleRate
