@@ -80,6 +80,12 @@ struct ShareViewControllerTests {
         window.contentAspectRatio = NSSize(width: 16, height: 9)
         window.contentResizeIncrements = NSSize(width: 1, height: 1)
         #expect(window.contentAspectRatio == .zero)
+        // 2 周目 (overlay → band 再切替相当): increments が既に (1, 1) の状態からでも
+        // 再代入が aspect を打ち消すこと (同値 no-op で解除漏れしないこと) を固定する
+        window.contentAspectRatio = NSSize(width: 16, height: 9)
+        #expect(window.contentAspectRatio == NSSize(width: 16, height: 9))
+        window.contentResizeIncrements = NSSize(width: 1, height: 1)
+        #expect(window.contentAspectRatio == .zero)
     }
 }
 
