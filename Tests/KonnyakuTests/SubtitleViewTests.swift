@@ -42,56 +42,54 @@ struct SubtitleViewTests {
     // 発火時に delta 全量を返さないと文頭が見えないまま流れ込む regression を防ぐ
     @Test
     func revealScrollDistanceFiresOnlyWhenAddedContentExceedsContainer() {
-        let container = CGSize(width: 400, height: 160)
         // 通常の 1 行追加 (収まる) は発火しない
         #expect(
             SubtitleView.revealScrollDistance(
-                previousContentHeight: 100, contentHeight: 140,
-                containerSize: container, measuredContainerWidth: 400
+                previousContentHeight: 100, contentHeight: 140, containerHeight: 160,
+                alignsToTop: false, finalsChanged: true
             ) == nil)
         // ちょうど表示高ぶんの追加は bottom 寄せで文頭まで見えるため発火しない
         #expect(
             SubtitleView.revealScrollDistance(
-                previousContentHeight: 100, contentHeight: 260,
-                containerSize: container, measuredContainerWidth: 400
+                previousContentHeight: 100, contentHeight: 260, containerHeight: 160,
+                alignsToTop: false, finalsChanged: true
             ) == nil)
         // 表示高を超える一括追加は追加分全量をスクロールする
         #expect(
             SubtitleView.revealScrollDistance(
-                previousContentHeight: 100, contentHeight: 300,
-                containerSize: container, measuredContainerWidth: 400
+                previousContentHeight: 100, contentHeight: 300, containerHeight: 160,
+                alignsToTop: false, finalsChanged: true
             ) == 200)
         // 行の失効等で高さが減った場合は発火しない
         #expect(
             SubtitleView.revealScrollDistance(
-                previousContentHeight: 300, contentHeight: 100,
-                containerSize: container, measuredContainerWidth: 400
+                previousContentHeight: 300, contentHeight: 100, containerHeight: 160,
+                alignsToTop: false, finalsChanged: true
             ) == nil)
         // レイアウト未確定 (表示高 0) では duration が発散するため発火しない
         #expect(
             SubtitleView.revealScrollDistance(
-                previousContentHeight: 0, contentHeight: 300,
-                containerSize: .zero, measuredContainerWidth: nil
+                previousContentHeight: 0, contentHeight: 300, containerHeight: 0,
+                alignsToTop: false, finalsChanged: true
             ) == nil)
     }
 
-    // 幅ガードの契約。未計測 (nil) を「幅変化」扱いすると view 生成後最初の一括長文の
-    // ロールアップが skip される regression、幅不一致で発火するとリサイズ中の折り返しで
-    // 誤スクロールする regression を防ぐ
+    // 発火ゲートの契約。確定行が変わらない高さ変化 (リサイズ・fontScale 変更の折り返し、
+    // volatile の漸増) で発火すると話し中・リサイズ中に誤スクロールする regression、
+    // 上寄せで発火すると鏡像の行順反転により読み順が逆転する regression を防ぐ
     @Test
-    func revealScrollDistanceWidthGate() {
-        let container = CGSize(width: 400, height: 160)
-        // 幅未計測 (nil) は幅変化ではないため発火する
+    func revealScrollDistanceRequiresFinalChangeAndBottomAlignment() {
+        // 確定行の変化を伴わない高さ増加 (折り返し・volatile) は発火しない
         #expect(
             SubtitleView.revealScrollDistance(
-                previousContentHeight: 100, contentHeight: 300,
-                containerSize: container, measuredContainerWidth: nil
-            ) == 200)
-        // 幅が動いた直後 (計測値と不一致) は折り返し起因のため発火しない
+                previousContentHeight: 100, contentHeight: 300, containerHeight: 160,
+                alignsToTop: false, finalsChanged: false
+            ) == nil)
+        // 上寄せ (鏡像) は他条件が揃っても発火しない
         #expect(
             SubtitleView.revealScrollDistance(
-                previousContentHeight: 100, contentHeight: 300,
-                containerSize: container, measuredContainerWidth: 300
+                previousContentHeight: 100, contentHeight: 300, containerHeight: 160,
+                alignsToTop: true, finalsChanged: true
             ) == nil)
     }
 

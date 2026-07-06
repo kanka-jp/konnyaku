@@ -21,9 +21,9 @@ struct SubtitleView: View {
     @State private var revealOffset: CGFloat = 0
     @State private var contentHeight: CGFloat = 0
     @State private var containerSize: CGSize = .zero
-    // パネルリサイズ中は折り返し起因で高さが跳ねるため、幅が動いた直後の高さ変化を
-    // ロールアップ発火から除外する判定に使う (未計測は nil のままにして除外しない)
-    @State private var measuredContainerWidth: CGFloat?
+    // リサイズ・fontScale 変更の折り返しや話し中 (volatile) の漸増でも高さは跳ねるため、
+    // 確定行の変化を伴う高さ増加だけをロールアップ対象にする判定に使う
+    @State private var lastFinalLineTexts: [String] = []
 
     private var isAdjusting: Bool {
         settings.isMovable && showsAdjustmentUI
@@ -106,36 +106,36 @@ struct SubtitleView: View {
 
     // 表示高を超える確定文が一度に届くと bottom 寄せでは文頭が一瞬も見えないため、
     // 追加分だけ下へずらした状態 (= 追加直前と同じ見え方) から等速で流し込む (ロールアップ)。
-    // 幅計測値と不一致 (リサイズ直後) の高さ変化は折り返し起因のため発火しない。
-    // 未計測 (nil) は幅変化ではないので除外しない (初回の一括長文を取りこぼさないため)
+    // 確定行の変化を伴わない高さ変化 (リサイズ・fontScale 変更の折り返し、話し中 volatile
+    // の漸増) では発火しない。上寄せ (鏡像) は文頭が常に画面端側に見えるうえ、行順反転の
+    // まま流すと読み順が末尾→先頭に逆転するため発火しない
     nonisolated static func revealScrollDistance(
         previousContentHeight: CGFloat,
         contentHeight: CGFloat,
-        containerSize: CGSize,
-        measuredContainerWidth: CGFloat?
+        containerHeight: CGFloat,
+        alignsToTop: Bool,
+        finalsChanged: Bool
     ) -> CGFloat? {
-        if let measuredContainerWidth, measuredContainerWidth != containerSize.width {
-            return nil
-        }
+        guard !alignsToTop, finalsChanged else { return nil }
         let delta = contentHeight - previousContentHeight
-        guard containerSize.height > 0, delta > containerSize.height else { return nil }
+        guard containerHeight > 0, delta > containerHeight else { return nil }
         return delta
     }
 
     private func handleContentHeightChange(_ newHeight: CGFloat) {
-        // 上寄せ (鏡像) は最新行の文頭が常に画面端側に見えるためロールアップ不要で、
-        // 行順反転のまま流すと読み順が末尾→先頭に逆転する。bottom 寄せ時のみ発火する
-        let distance = alignsToTop
-            ? nil
-            : Self.revealScrollDistance(
-                previousContentHeight: contentHeight,
-                contentHeight: newHeight,
-                containerSize: containerSize,
-                measuredContainerWidth: measuredContainerWidth
-            )
+        let finalLineTexts = (sourceLines + translationLines)
+            .filter { $0.kind == .final }
+            .map(\.text)
+        let distance = Self.revealScrollDistance(
+            previousContentHeight: contentHeight,
+            contentHeight: newHeight,
+            containerHeight: containerSize.height,
+            alignsToTop: alignsToTop,
+            finalsChanged: finalLineTexts != lastFinalLineTexts
+        )
         let shrank = newHeight < contentHeight
         contentHeight = newHeight
-        measuredContainerWidth = containerSize.width > 0 ? containerSize.width : nil
+        lastFinalLineTexts = finalLineTexts
         var transaction = Transaction()
         transaction.disablesAnimations = true
         guard let distance else {
