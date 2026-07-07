@@ -102,4 +102,60 @@ struct SegmentationPolicyTests {
         let text = String(repeating: "あ", count: 60)
         #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 40))
     }
+
+    // 動詞 + から (「言われたから」) は理由の接続用法として確定する
+    @Test
+    func clauseAwareTrueAtVerbKara() {
+        let text = "来月の予定を確認したところ会議が重なっていてどれも動かせないと言われたから"
+        #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 35))
+    }
+
+    // 体言 + から (「駅から」) は起点の格助詞用法のため保留する
+    @Test
+    func clauseAwareHoldsOffAtNounKara() {
+        let text = "会場までの移動時間を短くしたいので当日はいつも使っている自宅の最寄り駅から"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 36))
+    }
+
+    // て形 + から (「読んでから」) は時間の接続用法として確定する
+    @Test
+    func clauseAwareTrueAtTeKara() {
+        let text = "配布した資料の最初のページにある注意書きを全員がひととおり読んでから"
+        #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 30))
+    }
+
+    // 丁寧否定 + が (「ありませんが」) は接続用法として確定する
+    @Test
+    func clauseAwareTrueAtMasenGa() {
+        let text = "この機能はまだ実験段階なので細かい調整までは手が回っておらず申し訳ありませんが"
+        #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 35))
+    }
+
+    // かな語幹の一段動詞て形 (「できて」) は節境界として確定する
+    @Test
+    func clauseAwareTrueAtIchidanTeForm() {
+        let text = "先週から準備していた新しい仕組みがようやく手元の環境でも問題なく確認できて"
+        #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 37))
+    }
+
+    // 「〜に基づいて」は「い + て」で て形規則に一致するが複合格助詞のため保留する
+    @Test
+    func clauseAwareHoldsOffAtNiMotozuite() {
+        let text = "今回の設計は去年のユーザー調査で集めたアンケートの自由記述の分析結果に基づいて"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 38))
+    }
+
+    // ひらがな敬称 + で (「みなさんで」) は「ん + で」に一致するが体言句のため保留する
+    @Test
+    func clauseAwareHoldsOffAtHonorificDe() {
+        let text = "この後の時間はせっかく全員が集まっているのでここにいる参加者のみなさんで"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 36))
+    }
+
+    // 程度表現 + から (「くらいから」) は「い + から」に一致するが体言句のため保留する
+    @Test
+    func clauseAwareHoldsOffAtKuraiKara() {
+        let text = "リリース後の様子を見ながら進めたいので本格的な移行の作業は来月の中旬くらいから"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 38))
+    }
 }
