@@ -547,4 +547,34 @@ struct SegmentationPolicyTests {
         let text = "結露した窓のガラスに貼ったシートが時間とともにへば"
         #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 24))
     }
+
+    // 必要の助動詞「なければならない」の過渡状態 (「なければなら」) は保留する
+    @Test
+    func clauseAwareHoldsOffAtNakerebaNaraTransient() {
+        let text = "この項目は移行の前に必ず設定画面で状態を確認しなければなら"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 26))
+    }
+
+    // 願望の助動詞 (「したいが」「したい、」) は述語終端として確定する
+    @Test
+    func clauseAwareTrueAtDesiderativeTai() {
+        let taiga = "新しい表示モードは次の版でぜひ既定の設定として有効にしたいが"
+        #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: taiga, threshold: 28))
+        let taiComma = "リリースの前に一度は実際の会議の音声でも動作を確認したい、"
+        #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: taiComma, threshold: 26))
+    }
+
+    // 形式名詞の理由節 (「増えたことから」) は節境界として確定する
+    @Test
+    func clauseAwareTrueAtKotoKara() {
+        let text = "先月から利用者の数が急に増えたことから"
+        #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 18))
+    }
+
+    // 複合助詞 (「をもって」) は「っ + て」に一致するが句の途中のため保留する
+    @Test
+    func clauseAwareHoldsOffAtWoMotte() {
+        let text = "長年続けてきた旧形式の配信は本日の更新をもって"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 20))
+    }
 }
