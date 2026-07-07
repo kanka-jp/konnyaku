@@ -72,7 +72,9 @@ enum EvalAudio {
     // pacedRealtime は live のタイミング再現が要る評価 (区切り判定・レイテンシ測定) 用で、
     // タイミング無関係な CER 評価は off (faster-than-realtime) で回す。
     // onChunkFed は各バッファ供給直後に供給済み累積秒を通知する (pauseAware の
-    // ポーズ判定は無音中に volatile が来ず判定機会が無いため、供給側で発火させる)
+    // ポーズ判定は無音中に volatile が来ず判定機会が無いため、供給側で発火させる)。
+    // onChunkFed でポーズ判定する場合は pacedRealtime: true と併用すること —
+    // faster-than-realtime では供給が認識に先行し、見かけのポーズで誤発火する
     static func feed(
         url: URL,
         into continuation: AsyncStream<AnalyzerInput>.Continuation,

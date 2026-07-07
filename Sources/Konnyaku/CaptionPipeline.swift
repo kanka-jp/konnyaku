@@ -49,7 +49,10 @@ final class CaptionPipeline {
     private let segmentationPolicy: SegmentationPolicy = .current
     private var forcedFinalizeInFlight = false
     // pauseAware のポーズ判定入力 (audio 供給時刻と最新結果の audio 終端)。
-    // .current 運用では参照されないが、policy 切替時に配線変更が要らないよう常に更新する
+    // .current 運用では参照されないが観測値として常に更新する。判定は認識結果の
+    // 到着時のみ走るため、pauseAware を本番で有効化するには供給側の判定トリガー
+    // (eval replay の onChunkFed 相当。無音中は volatile が来ず判定機会が無い) の
+    // 配線が別途必要
     private let audioFeedClock = AudioFeedClock()
     private var lastResultAudioEnd: TimeInterval?
 
@@ -132,9 +135,11 @@ final class CaptionPipeline {
                     if result.isFinal {
                         self.forcedFinalizeInFlight = false
                     }
-                    if let end = Self.audioEndSeconds(of: result.text) {
-                        self.lastResultAudioEnd = end
-                    }
+                    // 時間属性が無い結果でも認識活動はあった (= その供給時刻まで
+                    // 無音でない) ため、供給時刻へ fallback して stale な前セグメント
+                    // 終端が見かけのポーズを作るのを防ぐ
+                    self.lastResultAudioEnd =
+                        Self.audioEndSeconds(of: result.text) ?? self.audioFeedClock.now()
                     let text = String(result.text.characters)
                         .trimmingCharacters(in: .whitespacesAndNewlines)
                     // 句読点のみの結果は表示・翻訳とも無意味なので落とす
