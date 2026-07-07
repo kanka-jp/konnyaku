@@ -654,6 +654,13 @@ struct SegmentationPolicyTests {
         #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 24))
     }
 
+    // 談話標識 (「もしかして」) は「し + て」に一致するが後続の節を導くため保留する
+    @Test
+    func clauseAwareHoldsOffAtMoshikashite() {
+        let text = "認識が急に止まった今回の問題はもしかして"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 18))
+    }
+
     // 辞書形 + ため (「使うため」) は確定し、節頭の接続詞 (「そのため」) は保留する
     @Test
     func clauseAwareTrueAtDictionaryFormTame() {
