@@ -134,14 +134,14 @@ struct SegmentationEvaluationTests {
         struct Snapshot {
             var lastAudioEnd: TimeInterval?
             var volatileText: String
-            var finalCount: Int
+            var revision: Int
             var forcedInFlight: Bool
         }
 
         private struct State {
             var lastAudioEnd: TimeInterval?
             var volatileText = ""
-            var finalCount = 0
+            var revision = 0
             var forcedInFlight = false
         }
 
@@ -151,20 +151,24 @@ struct SegmentationEvaluationTests {
             state.withLock {
                 Snapshot(
                     lastAudioEnd: $0.lastAudioEnd, volatileText: $0.volatileText,
-                    finalCount: $0.finalCount, forcedInFlight: $0.forcedInFlight)
+                    revision: $0.revision, forcedInFlight: $0.forcedInFlight)
             }
         }
 
         // production の recognitionTask と同じく text guard の前に全結果の audio
         // 終端を観測する (句読点のみの non-final でも認識活動はあった = 無音でない)
         func recordAudioActivity(audioEnd: TimeInterval) {
-            state.withLock { $0.lastAudioEnd = audioEnd }
+            state.withLock {
+                $0.lastAudioEnd = audioEnd
+                $0.revision += 1
+            }
         }
 
         func recordVolatile(text: String, audioEnd: TimeInterval) {
             state.withLock {
                 $0.volatileText = text
                 $0.lastAudioEnd = audioEnd
+                $0.revision += 1
             }
         }
 
@@ -172,16 +176,18 @@ struct SegmentationEvaluationTests {
             state.withLock {
                 $0.volatileText = ""
                 $0.lastAudioEnd = audioEnd
-                $0.finalCount += 1
+                $0.revision += 1
                 $0.forcedInFlight = false
             }
         }
 
-        // snapshot 時点から final が届いていない場合に限り in-flight を取得する
-        // (final が割り込んでいたら snapshot の volatile は終了済みセグメントのもの)
-        func tryAcquireForceFinalize(ifFinalCountEquals expected: Int) -> Bool {
+        // snapshot 時点から状態が変わっていない場合に限り in-flight を取得する
+        // (final の割り込みは終了済みセグメントへの発行、新しい volatile / 観測値の
+        // 割り込みは閉じたポーズ・古いテキストでの発行になるため、いずれも
+        // snapshot が stale なら取得せず次の判定機会に委ねる)
+        func tryAcquireForceFinalize(ifRevisionEquals expected: Int) -> Bool {
             state.withLock {
-                guard $0.finalCount == expected, !$0.forcedInFlight else { return false }
+                guard $0.revision == expected, !$0.forcedInFlight else { return false }
                 $0.forcedInFlight = true
                 return true
             }
@@ -301,7 +307,7 @@ struct SegmentationEvaluationTests {
                     if !snap.forcedInFlight,
                         policy.shouldForceFinalize(
                             text: text, threshold: threshold, context: context),
-                        pauseTracker.tryAcquireForceFinalize(ifFinalCountEquals: snap.finalCount)
+                        pauseTracker.tryAcquireForceFinalize(ifRevisionEquals: snap.revision)
                     {
                         // プロダクション同様、結果ループを塞がないよう別 Task で要求し
                         // (この場で await すると final の消費が止まり deadlock する)、
@@ -333,7 +339,7 @@ struct SegmentationEvaluationTests {
                     audioFedThrough: fedSeconds)
                 if policy.shouldForceFinalize(
                     text: observation.volatileText, threshold: threshold, context: context),
-                    pauseTracker.tryAcquireForceFinalize(ifFinalCountEquals: observation.finalCount)
+                    pauseTracker.tryAcquireForceFinalize(ifRevisionEquals: observation.revision)
                 {
                     // collector 側の要求と同じ契約 (失敗時に flag 解除)
                     Task {
