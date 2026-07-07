@@ -414,6 +414,59 @@ struct SegmentationPolicyTests {
         #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: noun, threshold: 23))
     }
 
+    // 疑問詞・数詞 + まで (「いつまで」「二つまで」) は体言句のため保留する
+    @Test
+    func clauseAwareHoldsOffAtNominalMade() {
+        let itsumade = "この静音の設定が有効になるのはいったいいつまで"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: itsumade, threshold: 20))
+        let futatsumade = "共有ビューで同時に表示できる字幕の行は二つまで"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: futatsumade, threshold: 20))
+    }
+
+    // 副詞 + 後に (「されたすぐ後に」の すぐ後に) は述語接続ではないため保留する
+    @Test
+    func clauseAwareHoldsOffAtAdverbAtoni() {
+        let text = "モデルの切り替えの通知が表示されたすぐ後に"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 18))
+    }
+
+    // ひらがな代名詞 + が (「あなたが」) は主語の途中のため保留する
+    @Test
+    func clauseAwareHoldsOffAtHiraganaPronounGa() {
+        let text = "次の定例のこの機能の説明はぜひあなたが"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 16))
+    }
+
+    // 比較の複合後置詞 (「に比べて」) は「べ + て」に一致するが句の途中のため保留する
+    @Test
+    func clauseAwareHoldsOffAtNiKurabete() {
+        let text = "新しい認識モデルの精度は前の版のものに比べて"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 19))
+    }
+
+    // い形容詞の述語 + 読点 (「見づらい、」) は確定し、転成名詞 (「違い、」) は保留する
+    @Test
+    func clauseAwareAdjectivePredicateComma() {
+        let adjective = "いまの配色だと字幕の文字と背景の対比が見づらい、"
+        #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: adjective, threshold: 21))
+        let noun = "同じ音声でも認識モデルの版ごとの結果の違い、"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: noun, threshold: 19))
+    }
+
+    // 義務構文の過渡状態 (「確認しなければ」) は「れば」に一致するが保留する
+    @Test
+    func clauseAwareHoldsOffAtNakerebaTransient() {
+        let text = "移行の前に設定の内容をひととおり確認しなければ"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 20))
+    }
+
+    // 連体詞 + 場合 (「どんな場合」) は名詞句の途中のため保留する
+    @Test
+    func clauseAwareHoldsOffAtDonnaBaai() {
+        let text = "下側の帯の配置の字幕が向いているのはどんな場合"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 20))
+    }
+
     // 副詞 + 読点 (「少しずつ、」) と過渡状態 (「もたら」) は保留する
     @Test
     func clauseAwareHoldsOffAtZutsuCommaAndMotara() {

@@ -63,6 +63,7 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
         "について", "として", "において", "にとって", "によって",
         "に関して", "に対して", "をめぐって", "に向けて", "につれて",
         "に基づいて", "に応じて", "に沿って", "にわたって", "に従って", "に加えて",
+        "に比べて", "にかけて",
         "を通じて", "を通して", "をもって",
         "改めて", "初めて", "極めて",
         "ものに", "もので",
@@ -72,7 +73,7 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
         "いくつ", "いつ",
         "なぜなら", "なぜならば", "残念ながら", "しかしながら", "やたら",
         "昔ながら", "我ながら", "依然ながら", "僭越ながら", "陰ながら",
-        "ほかなら", "他なら", "ばなら", "はなら",
+        "ほかなら", "他なら", "ばなら", "はなら", "なければ",
         "どうして", "どうやって", "どうしたら", "どうすれば", "ただし",
         "ほうが",
         "まだ", "ただ", "また", "ずつ", "もたら",
@@ -80,6 +81,8 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
         "しばらく", "おそらく", "ようやく", "まったく", "せっかく",
         "すぐ", "まもなく", "あくまで",
         "わたし", "あたし",
+        "あなた", "あなたが", "あなたから", "ぼくが", "ぼくから", "きみが", "きみから",
+        "しばらく前に", "すぐ前に",
         "けっして",
         "そして", "こうして", "そうして", "もしかして", "ひょっとして", "かえって", "なんで",
         "新た",
@@ -108,22 +111,27 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
         "た", "だ", "い", "う", "く", "ぐ", "す", "つ", "ぬ", "ぶ", "む", "る",
     ]
 
-    // 数詞 + 助数詞「つ」の直前に現れる文字 (一つ/2つ/ひとつ/みっつ/ここのつ 等)。
-    // つ 終端の動詞 (勝つ/待つ) は語幹が漢字正規化されるため衝突しない
+    // 数詞 + 助数詞「つ」の直前に現れる文字 (一つ/2つ/ひとつ/みっつ/ここのつ 等) と
+    // 疑問詞「いつ」の い。つ 終端の動詞 (勝つ/待つ) は語幹が漢字正規化されるため
+    // 衝突しない
     static let counterPrecedingCharacters: Set<Character> = [
         "一", "二", "三", "四", "五", "六", "七", "八", "九", "十", "何", "幾",
         "1", "2", "3", "4", "5", "6", "7", "8", "9",
         "１", "２", "３", "４", "５", "６", "７", "８", "９",
-        "っ", "と", "た", "つ", "な", "の",
+        "っ", "と", "た", "つ", "な", "の", "い",
     ]
 
     // 述語で終わるか (「が」の接続用法と「画面が」の主格用法の区別、および読点手前の
     // 文相当判定に共用)。動詞終端文字から「い」を除いた集合 (違い/扱い 等の転成名詞が
-    // 主語として頻出するため。長いが 等の形容詞対照は保留側に倒し、否定の ない と
-    // 願望の たい は多文字判定で維持) に、ん 終端で文字集合に乗らない「ません」を
-    // 加えた近似。数詞 + 助数詞「つ」(原因のひとつ/項目の四つ) は体言のため除外する
+    // 主語として頻出するため。長いが 等の形容詞対照は保留側に倒し、否定の ない・
+    // 願望の たい・形容詞接尾辞の しい/づらい/にくい/やすい は多文字判定で維持) に、
+    // ん 終端で文字集合に乗らない「ません」を加えた近似。
+    // 数詞 + 助数詞「つ」(原因のひとつ/項目の四つ) は体言のため除外する
     static func endsWithPredicate(_ text: some StringProtocol) -> Bool {
-        if text.hasSuffix("ません") || text.hasSuffix("ない") || text.hasSuffix("たい") {
+        if text.hasSuffix("ません") || text.hasSuffix("ない") || text.hasSuffix("たい")
+            || text.hasSuffix("しい") || text.hasSuffix("づらい") || text.hasSuffix("にくい")
+            || text.hasSuffix("やすい")
+        {
             return true
         }
         guard let last = text.last, last != "い" else { return false }
@@ -235,11 +243,9 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
             {
                 return true
             }
-            // 時間の接続節 (処理が終わるまで)。体言接続 (駅まで) と区別するため
-            // 直前が動詞終端のときに限定する (固定副詞 あくまで は負条件で除外)
-            if text.hasSuffix("まで"), let before = text.dropLast(2).last,
-                verbFinalCharacters.contains(before)
-            {
+            // 時間の接続節 (処理が終わるまで)。体言接続 (駅まで/二つまで/いつまで) と
+            // 区別するため手前が述語のときに限定する (固定副詞 あくまで は負条件で除外)
+            if text.hasSuffix("まで"), endsWithPredicate(text.dropLast(2)) {
                 return true
             }
             // 音便形「読んで/飲んで」のみ。他の「で」は格助詞が圧倒的に多い。
@@ -265,11 +271,13 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
         case "合":
             // 条件の接続節 (発生した場合/変更する場合/必要な場合)。体言接続
             // (配置の場合) と区別するため直前が動詞・形容詞終端または連体の な の
-            // ときに限定する
+            // ときに限定する。連体詞 (どんな/こんな 等の んな) は名詞句の途中
+            if text.hasSuffix("んな場合") { return false }
             guard text.hasSuffix("場合"), let before = text.dropLast(2).last else { return false }
             return verbFinalCharacters.contains(before) || before == "な"
         case "は":
             // 主題化された条件節 (発生した場合は)。体言 + の場合は は保留する
+            if text.hasSuffix("んな場合は") { return false }
             guard text.hasSuffix("場合は"), let before = text.dropLast(3).last else { return false }
             return verbFinalCharacters.contains(before) || before == "な"
         case "に":
@@ -282,11 +290,23 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
             if text.hasSuffix("ように"), let before = text.dropLast(3).last {
                 return verbFinalCharacters.contains(before)
             }
-            if text.hasSuffix("後に") || text.hasSuffix("前に") {
+            // 後に/あとに は過去形接続 (確認した後に) のみ。辞書形 + 後に は非文で、
+            // く/ぐ 終端の副詞 (すぐ後に/しばらく後に) を誤って拾わないため
+            // た/だ に限定する。前に は辞書形接続 (始める前に) が正当のため
+            // 動詞終端全体を許可し、固定副詞 (すぐ前に 等) は負条件で除外する
+            if text.hasSuffix("後に") {
+                guard let before = text.dropLast(2).last else { return false }
+                return before == "た" || before == "だ"
+            }
+            if text.hasSuffix("あとに") {
+                guard let before = text.dropLast(3).last else { return false }
+                return before == "た" || before == "だ"
+            }
+            if text.hasSuffix("前に") {
                 guard let before = text.dropLast(2).last else { return false }
                 return verbFinalCharacters.contains(before)
             }
-            if text.hasSuffix("あとに") || text.hasSuffix("まえに") {
+            if text.hasSuffix("まえに") {
                 guard let before = text.dropLast(3).last else { return false }
                 return verbFinalCharacters.contains(before)
             }
