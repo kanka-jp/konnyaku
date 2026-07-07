@@ -605,4 +605,38 @@ struct SegmentationPolicyTests {
         let text = "次の版では字幕の表示にこれまでになかった新たな、"
         #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 22))
     }
+
+    // い形容詞の理由節 (「見づらいため」「低いことから」) は節境界として確定する
+    @Test
+    func clauseAwareTrueAtAdjectiveReasonClause() {
+        let itame = "新しい表示モードは文字と背景の対比が弱くて見づらいため"
+        #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: itame, threshold: 24))
+        let ikotokara = "今回の障害は再現の頻度が極端に低いことから"
+        #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: ikotokara, threshold: 18))
+    }
+
+    // 疑問の語幹 + 条件形 (「どうしたら/どうすれば」) は質問文の途中のため保留する
+    @Test
+    func clauseAwareHoldsOffAtQuestionConditional() {
+        let doushitara = "保存した字幕の履歴が急に消えてしまったときはどうしたら"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: doushitara, threshold: 24))
+        let dousureba = "認識の言語がうまく切り替わらないときはどうすれば"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: dousureba, threshold: 22))
+    }
+
+    // 比較・助言の構文 (「したほうが」) は「ほう + が」で述語ではないため保留する
+    @Test
+    func clauseAwareHoldsOffAtHougaConstruction() {
+        let text = "本番で使う前に一度は静かな環境で動作を確認したほうが"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 24))
+    }
+
+    // 状態継続の従属節 (「開いたまま」「保存しないまま」) は節境界として確定する
+    @Test
+    func clauseAwareTrueAtMamaClause() {
+        let tamama = "共有ビューの画面は会議が終わるまでずっと開いたまま"
+        #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: tamama, threshold: 22))
+        let naimama = "変更した設定の内容を本体に保存しないまま"
+        #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: naimama, threshold: 18))
+    }
 }
