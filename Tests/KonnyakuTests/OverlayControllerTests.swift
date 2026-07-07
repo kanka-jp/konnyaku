@@ -175,6 +175,78 @@ struct OverlayControllerTests {
         #expect(frame.height == expectedHeight)
     }
 
+    // モニター選択 (preferredScreenFrame) は savedOrigin が無い場合、mainScreenFrame より
+    // 優先される契約。落ちる場合は Picker で選択したモニターが初回表示・リセット後の
+    // デフォルト位置に反映されない regression
+    @Test
+    func resolvedShowFramePrefersPreferredScreenOverMainWhenNoSavedOrigin() {
+        let main = NSRect(x: 0, y: 0, width: 1000, height: 800)
+        let preferred = NSRect(x: 1000, y: 0, width: 600, height: 400)
+        let frame = OverlayController.resolvedShowFrame(
+            fontScale: 1.0, savedOrigin: nil, savedSize: nil, screenFrames: [main, preferred],
+            mainScreenFrame: main, margin: 24, preferredScreenFrame: preferred
+        )
+        #expect(frame.minX >= preferred.minX)
+        #expect(frame.maxX <= preferred.maxX)
+    }
+
+    // savedOrigin がどの画面にも属さない (モニター構成変更等) 場合のフォールバックも
+    // preferredScreenFrame を優先する契約
+    @Test
+    func resolvedShowFramePrefersPreferredScreenWhenSavedOriginMatchesNoScreen() {
+        let main = NSRect(x: 0, y: 0, width: 1000, height: 800)
+        let preferred = NSRect(x: 1000, y: 0, width: 600, height: 400)
+        let frame = OverlayController.resolvedShowFrame(
+            fontScale: 1.0, savedOrigin: NSPoint(x: 5000, y: 5000), savedSize: nil,
+            screenFrames: [main, preferred], mainScreenFrame: main, margin: 24,
+            preferredScreenFrame: preferred
+        )
+        #expect(frame.minX >= preferred.minX)
+        #expect(frame.maxX <= preferred.maxX)
+    }
+
+    // savedOrigin が実在するスクリーンに属する場合は、ドラッグ位置 (savedOrigin) を
+    // preferredScreenFrame より優先する契約 (モニター選択後に手動調整した位置を尊重する)
+    @Test
+    func resolvedShowFrameKeepsSavedOriginScreenOverPreferredScreen() {
+        let main = NSRect(x: 0, y: 0, width: 1000, height: 800)
+        let dragged = NSRect(x: 1000, y: 0, width: 600, height: 400)
+        let frame = OverlayController.resolvedShowFrame(
+            fontScale: 1.0, savedOrigin: NSPoint(x: 1100, y: 100), savedSize: nil,
+            screenFrames: [main, dragged], mainScreenFrame: main, margin: 24,
+            preferredScreenFrame: main
+        )
+        #expect(frame.minX >= dragged.minX)
+        #expect(frame.maxX <= dragged.maxX)
+    }
+
+    @Test
+    func screenFrameForDisplayIDReturnsMatchingFrame() {
+        let main = NSRect(x: 0, y: 0, width: 1000, height: 800)
+        let secondary = NSRect(x: 1000, y: 0, width: 600, height: 400)
+        let frame = OverlayController.screenFrame(
+            forDisplayID: "secondary-id",
+            in: [(id: "main-id", frame: main), (id: "secondary-id", frame: secondary)]
+        )
+        #expect(frame == secondary)
+    }
+
+    @Test
+    func screenFrameForDisplayIDReturnsNilWhenNoMatch() {
+        let main = NSRect(x: 0, y: 0, width: 1000, height: 800)
+        let frame = OverlayController.screenFrame(
+            forDisplayID: "disconnected-id", in: [(id: "main-id", frame: main)]
+        )
+        #expect(frame == nil)
+    }
+
+    @Test
+    func screenFrameForDisplayIDReturnsNilWhenIDIsNil() {
+        let main = NSRect(x: 0, y: 0, width: 1000, height: 800)
+        let frame = OverlayController.screenFrame(forDisplayID: nil, in: [(id: "main-id", frame: main)])
+        #expect(frame == nil)
+    }
+
     @Test
     func targetScreenFrameUsesMainScreenWhenNoSavedOrigin() {
         let main = NSRect(x: 0, y: 0, width: 1000, height: 800)

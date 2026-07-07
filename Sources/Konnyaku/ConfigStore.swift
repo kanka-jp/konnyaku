@@ -8,6 +8,7 @@ enum ConfigStore {
     static let fontScaleKey = "font-scale"
     static let subtitlePlacementKey = "subtitle-placement"
     static let subtitlePositionKey = "subtitle-position"
+    static let preferredDisplayKey = "preferred-display"
     static let hideOverlayDuringShareKey = "hide-overlay-during-share"
     static let lowLatencyKey = "low-latency-translation"
     static let realtimeTranslationKey = "realtime-translation"
@@ -49,6 +50,10 @@ enum ConfigStore {
 
     # 共有ビューの字幕の表示位置: bottom (下) / top (上)
     subtitle-position = bottom
+
+    # 画面全体オーバーレイを表示するモニター。空なら自動 (ドラッグで動かした位置を復元、
+    # なければメインディスプレイ)。通常は設定画面のモニター選択から変更してください
+    preferred-display =
 
     # 共有ビュー表示中は画面全体のオーバーレイ字幕を隠す (共有ビュー側と二重に見えるのを防ぐ): true / false
     hide-overlay-during-share = false

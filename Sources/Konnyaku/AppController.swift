@@ -215,7 +215,18 @@ final class AppController {
     }
 
     func resetOverlayFrame() {
-        overlay.resetFrame(fontScale: settings.fontScale)
+        overlay.resetFrame(fontScale: settings.fontScale, preferredDisplayID: settings.preferredDisplayID)
+    }
+
+    var availableDisplays: [OverlayController.DisplayOption] {
+        OverlayController.availableDisplays()
+    }
+
+    // Picker での選択直後にそのモニターのデフォルト位置へ移動する (savedOrigin/savedSize
+    // はクリアされるため、ユーザーは新しいモニターで改めてドラッグ調整すればよい)
+    func setPreferredDisplay(_ id: String?) {
+        settings.preferredDisplayID = id
+        overlay.resetFrame(fontScale: settings.fontScale, preferredDisplayID: id)
     }
 
     var isShareViewOpen: Bool {

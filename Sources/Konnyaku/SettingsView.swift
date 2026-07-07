@@ -98,6 +98,21 @@ struct SettingsView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 6) {
+                    Picker(t("settings.display_screen"), selection: Binding(
+                        get: { controller.settings.preferredDisplayID ?? "" },
+                        set: { controller.setPreferredDisplay($0.isEmpty ? nil : $0) }
+                    )) {
+                        Text(t("settings.display_screen.auto")).tag("")
+                        ForEach(controller.availableDisplays) { display in
+                            Text(display.name).tag(display.id)
+                        }
+                    }
+                    Text(t("settings.display_screen.help"))
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
                     Picker(t("settings.subtitle_placement"), selection: Binding(
                         get: { controller.settings.subtitlePlacement },
                         set: { controller.settings.subtitlePlacement = $0 }
