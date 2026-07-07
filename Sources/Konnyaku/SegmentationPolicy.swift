@@ -25,6 +25,9 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
     static let sentenceBreakPunctuation: Set<Character> = [
         "、", "。", "，", "．", "！", "？", ",", ".", "!", "?",
     ]
+    // 読点は ASR が主題・主語句の直後にも挿入する (「…画面が、」) ため、それ自体は
+    // 文末とみなさず、読点の手前が節境界のときだけ確定する (句点・疑問符等と区別)
+    static let pausePunctuation: Set<Character> = ["、", "，", ","]
 
     // 前後の品詞に依らず節境界とみなせる接続助詞・接続形の末尾。
     // 「ので/のに」は体言接続が「なので/なのに」になるため単独で接続用法に確定し、
@@ -49,16 +52,16 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
         "ものに", "もので",
         "さんで", "ちゃんで", "くんで",
         "いつから", "くらいから", "ぐらいから",
-        "なぜなら",
+        "なぜなら", "残念ながら", "しかしながら", "やたら",
     ]
 
-    // 接続助詞「て」の直前に現れうる文字。五段動詞の音便形 (使って/聞いて/読んで) と
-    // かな語幹の一段動詞 (食べて/できて/信じて)。見て/出て/来て 等の漢字一文字語幹は
-    // 直前が漢字になるため本方式では判定できない (既知の保留側トレードオフ)。
-    // 「に」は「〜にて」(格助詞) と衝突するため含めない
+    // 接続助詞「て」の直前に現れうる文字。五段動詞の音便形 (使って/聞いて/読んで)、
+    // かな語幹の一段動詞 (食べて/できて/信じて)、い形容詞の接続形 (長くて/読みづらくて)。
+    // 見て/出て/来て 等の漢字一文字語幹は直前が漢字になるため本方式では判定できない
+    // (既知の保留側トレードオフ)。「に」は「〜にて」(格助詞) と衝突するため含めない
     static let teFormPrecedingCharacters: Set<Character> = [
         "っ", "い", "し", "え", "け", "せ", "べ", "め", "ね", "れ", "げ", "て",
-        "き", "ぎ", "じ", "ち", "み", "り", "び", "ひ", "ぜ", "で",
+        "き", "ぎ", "じ", "ち", "み", "り", "び", "ひ", "ぜ", "で", "く",
     ]
 
     // 「〜たから/〜するから」の接続用法を「駅から」の格助詞用法と区別するための
@@ -82,7 +85,11 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
             return text.suffix(Self.punctuationTailWindow)
                 .contains { Self.sentenceBreakPunctuation.contains($0) }
         case .clauseAware:
-            if let last = text.last, Self.sentenceBreakPunctuation.contains(last) {
+            guard let last = text.last else { return false }
+            if Self.pausePunctuation.contains(last) {
+                return Self.endsAtClauseBoundary(String(text.dropLast()))
+            }
+            if Self.sentenceBreakPunctuation.contains(last) {
                 return true
             }
             return Self.endsAtClauseBoundary(text)

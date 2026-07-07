@@ -200,4 +200,32 @@ struct SegmentationPolicyTests {
         let text = "この件は資料の準備ができたところで来週の定例の時間をもらって改めて"
         #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 30))
     }
+
+    // 主語句直後の読点 (「…画面が、」) はそれ自体を文末とみなさず保留する
+    @Test
+    func clauseAwareHoldsOffAtCommaAfterSubject() {
+        let text = "リアルタイムで音声を認識して翻訳するときに使うつもりで作っている設定の画面が、"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 38))
+    }
+
+    // 節境界直後の読点 (「…あったので、」) は確定する (読点の手前で節境界判定)
+    @Test
+    func clauseAwareTrueAtCommaAfterClauseBoundary() {
+        let text = "リアルタイムで音声を認識して翻訳するときに字幕の区切りがうまくいかない問題があったので、"
+        #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 40))
+    }
+
+    // 固定副詞 (「残念ながら」) は「ながら」に一致するが後続の述語を修飾するため保留する
+    @Test
+    func clauseAwareHoldsOffAtZannenNagara() {
+        let text = "字幕の表示位置を細かく調整できる設定も検討しましたが今回の対応では残念ながら"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 34))
+    }
+
+    // い形容詞の接続形 (「長くて」) は節境界として確定する
+    @Test
+    func clauseAwareTrueAtAdjectiveKute() {
+        let text = "画面の下に出てくる翻訳の字幕はどうしても一行あたりの説明が長くて"
+        #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 30))
+    }
 }
