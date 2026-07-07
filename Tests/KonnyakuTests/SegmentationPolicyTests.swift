@@ -264,11 +264,33 @@ struct SegmentationPolicyTests {
         #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 32))
     }
 
-    // 否定副詞 (「決して」) は「し + て」に一致するが後続の述語を修飾するため保留する
+    // 否定副詞 (「けっして」) は「し + て」に一致するが後続の述語を修飾するため保留する
+    // (漢字表記の 決して は 解決して 等の漢語複合動詞のて形と同形のため負条件にしない)
     @Test
     func clauseAwareHoldsOffAtKesshite() {
-        let text = "この設定を変えても既存の字幕の履歴が消えてしまうことは決して"
+        let text = "この設定を変えても既存の字幕の履歴が消えてしまうことはけっして"
         #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 28))
+    }
+
+    // 漢語複合動詞のて形 (「解決して」) は負条件に誤ブロックされず確定する
+    @Test
+    func clauseAwareTrueAtCompoundVerbTeForm() {
+        let text = "認識が途中で止まってしまう既知の問題は先週のリリースで解決して"
+        #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 28))
+    }
+
+    // コピュラ述語 + 読点 (「このままだ、」) は副詞 まだ の負条件より先に確定する
+    @Test
+    func clauseAwareTrueAtMamadaComma() {
+        let text = "再起動しても字幕の表示位置は前回の設定を引き継いでこのままだ、"
+        #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 28))
+    }
+
+    // 辞書形の述語 + が (「変更するが」) は接続用法として確定する
+    @Test
+    func clauseAwareTrueAtPlainVerbGa() {
+        let text = "次のリリースで字幕の既定の表示位置は画面の下側に変更するが"
+        #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 26))
     }
 
     // 節頭の接続詞 (「そして」) は「し + て」に一致するが直後に節が続くため保留する

@@ -26,7 +26,7 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
         "、", "。", "，", "．", "！", "？", ",", ".", "!", "?",
     ]
     // 読点は ASR が主題・主語句の直後にも挿入する (「…画面が、」) ため、それ自体は
-    // 文末とみなさず、読点の手前が節境界または述語終端 (predicateFinalSuffixes) の
+    // 文末とみなさず、読点の手前が節境界または述語終端 (endsWithPredicate) の
     // ときだけ確定する (句点・疑問符等と区別)
     static let pausePunctuation: Set<Character> = ["、", "，", ","]
 
@@ -56,7 +56,7 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
         "なぜなら", "残念ながら", "しかしながら", "やたら",
         "どうして", "どうやって", "ただし",
         "まだ", "ただ",
-        "けっして", "決して", "果たして",
+        "けっして",
         "そして", "こうして", "そうして", "なんで",
         "そしたら", "そうしたら", "せめて",
     ]
@@ -80,9 +80,14 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
         "た", "だ", "い", "う", "く", "ぐ", "す", "つ", "ぬ", "ぶ", "む", "る",
     ]
 
-    // 述語の終端パターン。「が」の接続用法 (〜ですが) を「画面が」の主格用法と区別する
-    // 直前判定と、読点の手前が述語で終わる文相当 (「〜します、」) の判定に共用する
-    static let predicateFinalSuffixes: [String] = ["です", "ます", "ません", "た", "だ", "ない"]
+    // 述語で終わるか (「が」の接続用法と「画面が」の主格用法の区別、および読点手前の
+    // 文相当判定に共用)。動詞終端文字 (辞書形 u 段 + た/だ/い — です/ます/ない の
+    // 末尾も包含する) に、ん 終端で文字集合に乗らない「ません」を加えた近似
+    static func endsWithPredicate(_ text: some StringProtocol) -> Bool {
+        if text.hasSuffix("ません") { return true }
+        guard let last = text.last else { return false }
+        return verbFinalCharacters.contains(last)
+    }
 
     // 五段動詞の条件形「〜えば」の直前に現れる え段文字 (書けば/話せば/読めば)
     static let ebaRowCharacters: Set<Character> = [
@@ -104,14 +109,14 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
             guard let last = text.last else { return false }
             if Self.pausePunctuation.contains(last) {
                 let head = text.dropLast()
+                // コピュラ述語「〜ままだ、」は副詞「まだ」の負条件より先に確定する
+                if head.hasSuffix("ままだ") { return true }
                 // 負条件 (まだ、/ただ、等の副詞) を述語判定より先に評価する
                 if Self.nonBoundarySuffixes.contains(where: { head.hasSuffix($0) }) {
                     return false
                 }
                 // 述語直後の読点 (「〜します、」) は文相当の区切りとして確定する
-                if Self.predicateFinalSuffixes.contains(where: { head.hasSuffix($0) }) {
-                    return true
-                }
+                if Self.endsWithPredicate(head) { return true }
                 return Self.endsAtClauseBoundary(head)
             }
             if Self.sentenceBreakPunctuation.contains(last) {
@@ -152,7 +157,7 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
             guard let previous = head.last else { return false }
             return verbFinalCharacters.contains(previous)
         case "が":
-            return predicateFinalSuffixes.contains { head.hasSuffix($0) }
+            return endsWithPredicate(head)
         case "ば":
             // 五段動詞の条件形 (書けば/話せば/読めば)。え段 + ば に限定する
             // (一段・する の条件形「れば」は無条件サフィックス側で確定済み)
