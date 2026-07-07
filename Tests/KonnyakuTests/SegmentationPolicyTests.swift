@@ -186,4 +186,18 @@ struct SegmentationPolicyTests {
         let text = "次のセッションの受付はさっき案内があった二階の奥にある会議室でから"
         #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 30))
     }
+
+    // 体言「もの」+ 格助詞 (「もので」) は「ので」に表層一致するが句の途中のため保留する
+    @Test
+    func clauseAwareHoldsOffAtMonoDe() {
+        let text = "動作確認に使う端末は会社の備品ではなくいつも使っている手元のもので"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 30))
+    }
+
+    // 固定副詞 (「改めて」) は「め + て」に一致するが後続の述語を修飾する句の途中のため保留する
+    @Test
+    func clauseAwareHoldsOffAtFixedAdverbTe() {
+        let text = "この件は資料の準備ができたところで来週の定例の時間をもらって改めて"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 30))
+    }
 }
