@@ -45,7 +45,7 @@
 "settings.subtitle_position" = "Subtitle Position";
 "settings.subtitle_position.bottom" = "Bottom";
 "settings.subtitle_position.top" = "Top";
-"settings.subtitle_position.help" = "Applies to the full-screen overlay frame and to the share view (except the share view's band placement)";
+"settings.subtitle_position.help" = "Applies to the full-screen overlay frame and to the share view (in the \"band\" layout it positions the band itself; subtitles inside the band are always bottom-aligned)";
 "settings.hide_overlay_during_share" = "Hide Overlay Subtitles While Share View Is Open";
 "settings.hide_overlay_during_share.help" = "Subtitles are composited into the share view, so hiding the full-screen overlay avoids seeing them twice on your own screen (they stay visible while adjusting position)";
 "settings.correction" = "Refine Transcription with AI";

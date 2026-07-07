@@ -45,7 +45,7 @@
 "settings.subtitle_position" = "字幕の表示位置";
 "settings.subtitle_position.bottom" = "下";
 "settings.subtitle_position.top" = "上";
-"settings.subtitle_position.help" = "画面全体オーバーレイの枠内、および共有ビューでの字幕の寄せ方向に適用されます (共有ビューの黒帯配置を除く)";
+"settings.subtitle_position.help" = "画面全体オーバーレイの枠内、および共有ビューでの字幕の寄せ方向に適用されます (「黒帯」では帯自体の画面上の位置に使われ、帯内の字幕は常に下寄せです)";
 "settings.hide_overlay_during_share" = "共有ビュー表示中はオーバーレイ字幕を隠す";
 "settings.hide_overlay_during_share.help" = "字幕は共有ビューに合成されるため、画面全体のオーバーレイを隠すと自分の画面での二重表示を避けられます (位置調整中は表示されます)";
 "settings.correction" = "AI で文字起こしを補正";

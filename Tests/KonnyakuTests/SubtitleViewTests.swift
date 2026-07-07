@@ -93,7 +93,7 @@ struct SubtitleViewTests {
             ) == nil)
     }
 
-    // 「字幕の表示位置」は band 以外 (画面全体オーバーレイ/共有ビュー映像重畳) に適用される契約。
+    // band 配置ではテキスト自体の寄せは常に bottom (帯の画面上の位置は Spacer が別途 position に従わせる) である契約。
     // band での上寄せ化 (帯クリップで最新行欠落) と画面全体オーバーレイでの top 無視、両 regression を防ぐ
     @Test
     func resolvedAlignsToTopFollowsPositionExceptForBandPlacement() {
