@@ -13,6 +13,9 @@ struct SubtitleView: View {
     // 共有ビューでは調整モードの枠・操作 UI・プレビュー行を出さない (Meet の視聴者に
     // 映る面に管理 UI を混ぜない)
     var showsAdjustmentUI = true
+    // settings.subtitlePlacement 依存だと黒帯選択だけで無関係な画面全体オーバーレイの
+    // 上寄せまで無効化されるため、呼び出し元がここで黒帯コンテナかを明示する
+    var isBandContainer = false
     let onFinishMoving: () -> Void
 
     @State private var revealOffset: CGFloat = 0
@@ -26,16 +29,16 @@ struct SubtitleView: View {
         settings.isMovable && showsAdjustmentUI
     }
 
-    // band は Spacer で外側から位置制御するため常に bottom 寄せ、それ以外 (画面全体
+    // band コンテナは Spacer で外側から位置制御するため常に bottom 寄せ、それ以外 (画面全体
     // オーバーレイ / 共有ビューの映像重畳) は「字幕の表示位置」設定に従う
     private var alignsToTop: Bool {
-        Self.resolvedAlignsToTop(placement: settings.subtitlePlacement, position: settings.subtitlePosition)
+        Self.resolvedAlignsToTop(isBandContainer: isBandContainer, position: settings.subtitlePosition)
     }
 
     nonisolated static func resolvedAlignsToTop(
-        placement: OverlaySettings.SubtitlePlacement, position: OverlaySettings.SubtitlePosition
+        isBandContainer: Bool, position: OverlaySettings.SubtitlePosition
     ) -> Bool {
-        placement != .band && position == .top
+        !isBandContainer && position == .top
     }
 
     var body: some View {

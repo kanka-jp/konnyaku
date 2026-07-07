@@ -93,14 +93,14 @@ struct SubtitleViewTests {
             ) == nil)
     }
 
-    // band 配置ではテキスト自体の寄せは常に bottom (帯の画面上の位置は Spacer が別途 position に従わせる) である契約。
-    // band での上寄せ化 (帯クリップで最新行欠落) と画面全体オーバーレイでの top 無視、両 regression を防ぐ
+    // isBandContainer は呼び出し元が明示するフラグで settings.subtitlePlacement に依存しない契約。
+    // 依存させると黒帯選択だけで無関係な画面全体オーバーレイの上寄せが無効化される regression になる
     @Test
-    func resolvedAlignsToTopFollowsPositionExceptForBandPlacement() {
-        #expect(SubtitleView.resolvedAlignsToTop(placement: .overlay, position: .top))
-        #expect(!SubtitleView.resolvedAlignsToTop(placement: .overlay, position: .bottom))
-        #expect(!SubtitleView.resolvedAlignsToTop(placement: .band, position: .top))
-        #expect(!SubtitleView.resolvedAlignsToTop(placement: .band, position: .bottom))
+    func resolvedAlignsToTopFollowsPositionAndIgnoresBandContainerOnly() {
+        #expect(SubtitleView.resolvedAlignsToTop(isBandContainer: false, position: .top))
+        #expect(!SubtitleView.resolvedAlignsToTop(isBandContainer: false, position: .bottom))
+        #expect(!SubtitleView.resolvedAlignsToTop(isBandContainer: true, position: .top))
+        #expect(!SubtitleView.resolvedAlignsToTop(isBandContainer: true, position: .bottom))
     }
 
     // ゾーン→カーソル方向の対応契約。NSView は非 flipped (y=0 が下端) のため
