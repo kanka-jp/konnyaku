@@ -43,7 +43,7 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
     static let unconditionalClauseSuffixes: [String] = [
         "ので", "のに", "けど", "けども", "けれど", "けれども",
         "たら", "んだら", "れば", "なら", "ながら", "ながらも", "つつ", "ずに",
-        "ものの", "ても", "んでも",
+        "たものの", "だものの", "ても", "んでも",
         "たため", "だため", "るため",
         "たうえで", "だうえで", "た上で", "だ上で", "たあとで", "だあとで", "た後で", "だ後で",
     ]
@@ -70,7 +70,7 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
         "そして", "こうして", "そうして", "なんで",
         "そしたら", "そうしたら", "せめて", "すべて",
         "例えば", "たとえば", "あえて", "敢えて",
-        "とても", "としても", "にしても",
+        "とても", "としても", "にしても", "どうしても", "なんとしても", "とんでも",
     ]
 
     // 接続助詞「て」の直前に現れうる文字。五段動詞の音便形 (使って/聞いて/読んで)、
@@ -127,15 +127,16 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
             guard let last = tail.last else { return false }
             if Self.pausePunctuation.contains(last) {
                 var head = tail.dropLast()
+                // 終助詞 (「できますね、」) は述語の後ろに付くため、負条件・述語の
+                // 判定より先に透過する (「ただね、」を負条件が見逃さないため)
+                while let particle = head.last, Self.sentenceFinalParticles.contains(particle) {
+                    head = head.dropLast()
+                }
                 // コピュラ述語「〜ままだ、」は副詞「まだ」の負条件より先に確定する
                 if head.hasSuffix("ままだ") { return true }
                 // 負条件 (まだ、/ただ、等の副詞) を述語判定より先に評価する
                 if Self.nonBoundarySuffixes.contains(where: { head.hasSuffix($0) }) {
                     return false
-                }
-                // 終助詞 (「できますね、」) は述語の後ろに付くため透過する
-                while let particle = head.last, Self.sentenceFinalParticles.contains(particle) {
-                    head = head.dropLast()
                 }
                 // 述語直後の読点 (「〜します、」) は文相当の区切りとして確定する
                 if Self.endsWithPredicate(head) { return true }

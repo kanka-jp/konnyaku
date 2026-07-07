@@ -452,4 +452,27 @@ struct SegmentationPolicyTests {
         let text = "前回の版では認識が止まる問題への恒久的な対応はまだありませんで"
         #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 28))
     }
+
+    // 固定副詞 (「どうしても」) と過渡状態 (「とんでも」) は「(んで)も」に一致するが保留する
+    @Test
+    func clauseAwareHoldsOffAtDoushitemoAndTondemo() {
+        let doushitemo = "古い端末との互換性の制約があって表示の仕組みの側ではどうしても"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: doushitemo, threshold: 28))
+        let tondemo = "設定を全部初期化してやり直すというのはそれはさすがにとんでも"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: tondemo, threshold: 26))
+    }
+
+    // 連体の もの + の (「必要なものの」) は逆接に一致せず保留する
+    @Test
+    func clauseAwareHoldsOffAtGenitiveMonono() {
+        let text = "移行を始める前に新しい環境の構築に必要なものの"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 22))
+    }
+
+    // 副詞 + 終助詞 + 読点 (「ただね、」) は終助詞を剥がした後も負条件で保留する
+    @Test
+    func clauseAwareHoldsOffAtAdverbParticleComma() {
+        let text = "設定はそのままでもほとんどの場合は問題なく使えるんですがただね、"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 30))
+    }
 }
