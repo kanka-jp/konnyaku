@@ -853,4 +853,76 @@ struct SegmentationPolicyTests {
         let text = "利用者の意見を取り込んで表示の品質を少しずつ改善しつつ"
         #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 24))
     }
+
+    // pauseAware は境界表現の無いテキストでもポーズ判定で確定するため、
+    // 中立な語彙の実文で判定入力 (Context) だけを変えて検証する
+    private static let pauseNeutralText = "リアルタイムで音声を認識して翻訳するときに使う設定の画面を昨日から作っています"
+
+    // 供給済み audio と最新結果終端の差が silenceMs 以上なら確定する
+    @Test
+    func pauseAwareTrueWhenSilenceExceedsThreshold() {
+        let context = SegmentationPolicy.Context(lastResultAudioEnd: 10.0, audioFedThrough: 10.4)
+        #expect(
+            SegmentationPolicy.pauseAware(silenceMs: 300).shouldForceFinalize(
+                text: Self.pauseNeutralText, threshold: 38, context: context))
+    }
+
+    // ポーズが silenceMs 未満なら保留する
+    @Test
+    func pauseAwareHoldsOffWhenSilenceIsShort() {
+        let context = SegmentationPolicy.Context(lastResultAudioEnd: 10.0, audioFedThrough: 10.2)
+        #expect(
+            !SegmentationPolicy.pauseAware(silenceMs: 300).shouldForceFinalize(
+                text: Self.pauseNeutralText, threshold: 38, context: context))
+    }
+
+    // silenceMs の違いで同じポーズの判定が分かれる (sweep の判定境界)
+    @Test
+    func pauseAwareSilenceMsControlsDecision() {
+        let context = SegmentationPolicy.Context(lastResultAudioEnd: 10.0, audioFedThrough: 10.6)
+        #expect(
+            SegmentationPolicy.pauseAware(silenceMs: 500).shouldForceFinalize(
+                text: Self.pauseNeutralText, threshold: 38, context: context))
+        #expect(
+            !SegmentationPolicy.pauseAware(silenceMs: 800).shouldForceFinalize(
+                text: Self.pauseNeutralText, threshold: 38, context: context))
+    }
+
+    // audio 時刻が揃っていない間 (認識初期・時間属性なし) は保留する
+    @Test
+    func pauseAwareHoldsOffWithoutContext() {
+        #expect(
+            !SegmentationPolicy.pauseAware(silenceMs: 300).shouldForceFinalize(
+                text: Self.pauseNeutralText, threshold: 38))
+        let partial = SegmentationPolicy.Context(lastResultAudioEnd: nil, audioFedThrough: 10.4)
+        #expect(
+            !SegmentationPolicy.pauseAware(silenceMs: 300).shouldForceFinalize(
+                text: Self.pauseNeutralText, threshold: 38, context: partial))
+    }
+
+    // 閾値未満はポーズがあっても切らない (自然 final に任せる)
+    @Test
+    func pauseAwareIsFalseBelowThreshold() {
+        let context = SegmentationPolicy.Context(lastResultAudioEnd: 10.0, audioFedThrough: 11.0)
+        #expect(
+            !SegmentationPolicy.pauseAware(silenceMs: 300).shouldForceFinalize(
+                text: Self.pauseNeutralText, threshold: 60, context: context))
+    }
+
+    // ポーズ情報が無くても hardLimit (閾値 1.5 倍) で強制確定する (current と共通の上限)
+    @Test
+    func pauseAwareTrueAtGraceLimitRegardlessOfPause() {
+        #expect(
+            SegmentationPolicy.pauseAware(silenceMs: 300).shouldForceFinalize(
+                text: Self.pauseNeutralText, threshold: 26))
+    }
+
+    // eval の A/B 対象列挙: 既存 2 policy + silenceMs sweep の 3 段
+    @Test
+    func allCasesContainsPauseAwareSweep() {
+        #expect(SegmentationPolicy.allCases == [
+            .current, .clauseAware,
+            .pauseAware(silenceMs: 300), .pauseAware(silenceMs: 500), .pauseAware(silenceMs: 800),
+        ])
+    }
 }

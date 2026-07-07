@@ -1,6 +1,25 @@
 import Foundation
 import Speech
+import Synchronization
 import Translation
+
+// 認識エンジンへ供給済みの audio 累積秒。capture callback (非 MainActor) が進め、
+// MainActor の判定側が読むため Mutex で共有する
+final class AudioFeedClock: Sendable {
+    private let seconds = Mutex(0.0)
+
+    func advance(bySeconds delta: Double) {
+        seconds.withLock { $0 += delta }
+    }
+
+    func now() -> Double {
+        seconds.withLock { $0 }
+    }
+
+    func reset() {
+        seconds.withLock { $0 = 0 }
+    }
+}
 
 @MainActor
 final class CaptionPipeline {
@@ -29,6 +48,10 @@ final class CaptionPipeline {
     private var segmentThreshold = CaptionPipeline.latinSegmentThreshold
     private let segmentationPolicy: SegmentationPolicy = .current
     private var forcedFinalizeInFlight = false
+    // pauseAware のポーズ判定入力 (audio 供給時刻と最新結果の audio 終端)。
+    // .current 運用では参照されないが、policy 切替時に配線変更が要らないよう常に更新する
+    private let audioFeedClock = AudioFeedClock()
+    private var lastResultAudioEnd: TimeInterval?
 
     init(state: CaptionState, onFailure: @escaping @MainActor () -> Void) {
         self.state = state
@@ -66,8 +89,15 @@ final class CaptionPipeline {
             : Self.latinSegmentThreshold
         forcedFinalizeInFlight = false
 
+        audioFeedClock.reset()
+        lastResultAudioEnd = nil
         let inputContinuation = try await transcription.start(contextualTerms: contextualTerms)
+        let feedClock = audioFeedClock
+        let sampleRate = analyzerFormat.sampleRate
         try audio.start(convertingTo: analyzerFormat) { input in
+            if sampleRate > 0 {
+                feedClock.advance(bySeconds: Double(input.buffer.frameLength) / sampleRate)
+            }
             inputContinuation.yield(input)
         }
 
@@ -101,6 +131,9 @@ final class CaptionPipeline {
                     // guard より先に解除しないと以降の強制区切りが永久停止する
                     if result.isFinal {
                         self.forcedFinalizeInFlight = false
+                    }
+                    if let end = Self.audioEndSeconds(of: result.text) {
+                        self.lastResultAudioEnd = end
                     }
                     let text = String(result.text.characters)
                         .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -326,11 +359,26 @@ final class CaptionPipeline {
         }
     }
 
+    // 認識結果の attributed runs から audio 区間の終端秒を取り出す (pauseAware の
+    // ポーズ判定入力。時間属性が無い run のみの結果では nil)
+    nonisolated static func audioEndSeconds(of text: AttributedString) -> TimeInterval? {
+        var end: TimeInterval?
+        for run in text.runs {
+            guard let range = run.audioTimeRange else { continue }
+            end = max(end ?? range.end.seconds, range.end.seconds)
+        }
+        return end
+    }
+
     // 切れ目なく話し続けると isFinal が届かず翻訳が始まらないため強制確定で文を区切る。
     // 確定結果が届くまで再要求しない (volatile 更新ごとの重複要求を防ぐ)
     private func forceFinalizeIfOverflowing(volatile text: String) {
+        let context = SegmentationPolicy.Context(
+            lastResultAudioEnd: lastResultAudioEnd,
+            audioFedThrough: audioFeedClock.now())
         guard !forcedFinalizeInFlight,
-            segmentationPolicy.shouldForceFinalize(text: text, threshold: segmentThreshold)
+            segmentationPolicy.shouldForceFinalize(
+                text: text, threshold: segmentThreshold, context: context)
         else { return }
         forcedFinalizeInFlight = true
         debugLog("force finalize requested (len=\(text.count))")

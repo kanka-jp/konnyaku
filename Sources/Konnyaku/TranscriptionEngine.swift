@@ -22,12 +22,14 @@ final class TranscriptionEngine {
             throw KonnyakuError.speechUnsupported
         }
         // .fastResults を外すと volatile 結果の初出が数秒単位で遅れ、ライブ字幕として
-        // 成立しないことを実測 (確定精度の差は eval で CER +0.6pp 程度、AI 補正層が吸収する)
+        // 成立しないことを実測 (確定精度の差は eval で CER +0.6pp 程度、AI 補正層が吸収する)。
+        // .audioTimeRange は pauseAware のポーズ判定に使う audio 終端時刻の取得用
+        // (eval で認識結果への副作用が無いことを確認済み)
         let transcriber = SpeechTranscriber(
             locale: locale,
             transcriptionOptions: [],
             reportingOptions: [.volatileResults, .fastResults],
-            attributeOptions: []
+            attributeOptions: [.audioTimeRange]
         )
         if let request = try await AssetInventory.assetInstallationRequest(supporting: [transcriber]) {
             onDownloadProgress?(request.progress)
