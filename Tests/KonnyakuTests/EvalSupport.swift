@@ -107,7 +107,10 @@ enum EvalAudio {
             }
             if let converted = AudioCaptureEngine.convert(buffer, with: converter, to: analyzerFormat) {
                 continuation.yield(AnalyzerInput(buffer: converted))
-                fedSeconds += Double(buffer.frameLength) / sourceFormat.sampleRate
+                // production の AudioFeedClock と同じく変換後バッファで累積する
+                // (audioTimeRange は analyzer 入力時間軸のため、source 時間軸だと
+                // resampling の per-chunk 丸めで時間基準がずれる)
+                fedSeconds += Double(converted.frameLength) / analyzerFormat.sampleRate
                 onChunkFed?(fedSeconds)
             } else {
                 // 黙殺すると timing / CER 計測が静かに歪むため可視化する (best-effort 続行)
