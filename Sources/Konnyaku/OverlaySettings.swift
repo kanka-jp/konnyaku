@@ -14,7 +14,8 @@ final class OverlaySettings {
         case band
     }
 
-    // 共有ビューでの字幕の表示位置 (画面全体オーバーレイはドラッグで自由配置のため対象外)
+    // 字幕の表示位置 (枠内でテキストを上寄せ/下寄せどちらにするか。共有ビューの黒帯は
+    // Spacer で外側から位置を制御するため対象外)
     enum SubtitlePosition: String, CaseIterable {
         case bottom
         case top

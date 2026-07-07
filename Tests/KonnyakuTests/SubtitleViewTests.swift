@@ -93,6 +93,16 @@ struct SubtitleViewTests {
             ) == nil)
     }
 
+    // 「字幕の表示位置」は band 以外 (画面全体オーバーレイ/共有ビュー映像重畳) に適用される契約。
+    // band での上寄せ化 (帯クリップで最新行欠落) と画面全体オーバーレイでの top 無視、両 regression を防ぐ
+    @Test
+    func resolvedAlignsToTopFollowsPositionExceptForBandPlacement() {
+        #expect(SubtitleView.resolvedAlignsToTop(placement: .overlay, position: .top))
+        #expect(!SubtitleView.resolvedAlignsToTop(placement: .overlay, position: .bottom))
+        #expect(!SubtitleView.resolvedAlignsToTop(placement: .band, position: .top))
+        #expect(!SubtitleView.resolvedAlignsToTop(placement: .band, position: .bottom))
+    }
+
     // ゾーン→カーソル方向の対応契約。NSView は非 flipped (y=0 が下端) のため
     // maxY 側が視覚上の上端になる。座標系の取り違え (上下反転) は実機でしか気づけない
     // regression なので純粋関数側で固定する

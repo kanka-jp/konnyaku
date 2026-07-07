@@ -493,7 +493,6 @@ struct ShareOverlayView: View {
                 SubtitleView(
                     state: state, settings: settings, languages: languages,
                     showsAdjustmentUI: false,
-                    alignsToTop: settings.subtitlePosition == .top,
                     onFinishMoving: {}
                 )
             }

@@ -41,10 +41,11 @@
 "settings.subtitle_placement" = "共有ビューの字幕配置";
 "settings.subtitle_placement.overlay" = "映像に重ねる";
 "settings.subtitle_placement.band" = "映像の外の黒帯に表示";
-"settings.subtitle_placement.help" = "「黒帯」にすると共有ビューの映像の外に字幕専用の帯を設け、映像と字幕が重なりません (帯の上下は「字幕の表示位置」に従います。画面全体オーバーレイには影響しません)";
-"settings.subtitle_position" = "共有ビューの字幕の表示位置";
+"settings.subtitle_placement.help" = "「黒帯」にすると共有ビューの映像の外に字幕専用の帯を設け、映像と字幕が重なりません (帯の上下は「字幕の表示位置」に従います。この配置設定自体は画面全体オーバーレイには影響しません)";
+"settings.subtitle_position" = "字幕の表示位置";
 "settings.subtitle_position.bottom" = "下";
 "settings.subtitle_position.top" = "上";
+"settings.subtitle_position.help" = "画面全体オーバーレイの枠内、および共有ビューでの字幕の寄せ方向に適用されます (共有ビューの黒帯配置を除く)";
 "settings.hide_overlay_during_share" = "共有ビュー表示中はオーバーレイ字幕を隠す";
 "settings.hide_overlay_during_share.help" = "字幕は共有ビューに合成されるため、画面全体のオーバーレイを隠すと自分の画面での二重表示を避けられます (位置調整中は表示されます)";
 "settings.correction" = "AI で文字起こしを補正";
