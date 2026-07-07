@@ -475,4 +475,20 @@ struct SegmentationPolicyTests {
         let text = "設定はそのままでもほとんどの場合は問題なく使えるんですがただね、"
         #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 30))
     }
+
+    // 音便形の譲歩 (「急いでも」) と否定の理由節 (「できないため」) は確定する
+    @Test
+    func clauseAwareTrueAtIdemoAndNaiTame() {
+        let idemo = "モデルの読み込みは端末の性能に依存するのでどれだけ急いでも"
+        #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: idemo, threshold: 26))
+        let naitame = "外部のネットワークからは検証用のサーバーに接続できないため"
+        #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: naitame, threshold: 26))
+    }
+
+    // 固定副詞 (「かねてから」) は「てから」に一致するが句の途中のため保留する
+    @Test
+    func clauseAwareHoldsOffAtKanetekara() {
+        let text = "認識モデルの差し替えに備えた仕組みの見直しはこの機能ではかねてから"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 30))
+    }
 }
