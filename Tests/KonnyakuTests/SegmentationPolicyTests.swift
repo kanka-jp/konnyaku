@@ -533,4 +533,18 @@ struct SegmentationPolicyTests {
         let text = "字幕の表示の設定について説明しようと思ったんですがそういえば"
         #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 28))
     }
+
+    // 節頭の接続詞「なぜならば」は「ならば」に一致するが直後に理由節が続くため保留する
+    @Test
+    func clauseAwareHoldsOffAtNazenaraba() {
+        let text = "この機能は今回の版では既定で無効にしていますなぜならば"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 26))
+    }
+
+    // 五段動詞の条件形に現れない「へ + ば」(「へばりつく」の過渡状態) は保留する
+    @Test
+    func clauseAwareHoldsOffAtHebaTransient() {
+        let text = "結露した窓のガラスに貼ったシートが時間とともにへば"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 24))
+    }
 }
