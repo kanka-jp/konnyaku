@@ -639,4 +639,50 @@ struct SegmentationPolicyTests {
         let naimama = "変更した設定の内容を本体に保存しないまま"
         #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: naimama, threshold: 18))
     }
+
+    // 疑問の量化表現 + 読点 (「いくつか、」) は か を剥がしても述語ではないため保留する
+    @Test
+    func clauseAwareHoldsOffAtIkutsukaComma() {
+        let text = "移行の前に設定の画面で確認してほしい項目がいくつか、"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 22))
+    }
+
+    // 固定副詞 (「もしかしたら」) は「たら」に一致するが後続の節を導くため保留する
+    @Test
+    func clauseAwareHoldsOffAtMoshikashitara() {
+        let text = "認識が急に止まってしまう今回の問題の原因はもしかしたら"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 24))
+    }
+
+    // 辞書形 + ため (「使うため」) は確定し、節頭の接続詞 (「そのため」) は保留する
+    @Test
+    func clauseAwareTrueAtDictionaryFormTame() {
+        let tsukau = "新しい認識のモデルを次の版の検証でも続けて使うため"
+        #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: tsukau, threshold: 22))
+        let sonotame = "認識の処理は端末の性能に大きく依存していますそのため"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: sonotame, threshold: 24))
+    }
+
+    // 辞書形 + 上で (「使う上で」) は前提の接続節として確定する
+    @Test
+    func clauseAwareTrueAtDictionaryFormUede() {
+        let text = "この機能を毎日の会議の記録の用途で継続して使う上で"
+        #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 22))
+    }
+
+    // 述語 + 場合 (「発生した場合」) は確定し、体言 + の場合 は保留する
+    @Test
+    func clauseAwareTrueAtPredicateBaai() {
+        let hassei = "共有ビューの表示中に認識のエラーが発生した場合"
+        #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: hassei, threshold: 20))
+        let noBaai = "字幕の表示の位置を調整できるのは下側の帯の配置の場合"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: noBaai, threshold: 24))
+    }
+
+    // 「〜しつつあります」の過渡状態 (「改善しつつ」) は保留する (つつも のみ確定)
+    @Test
+    func clauseAwareHoldsOffAtBareTsutsu() {
+        let text = "利用者の意見を取り込んで表示の品質を少しずつ改善しつつ"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 24))
+    }
 }

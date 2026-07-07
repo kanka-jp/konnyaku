@@ -40,15 +40,17 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
     // 「けど/けれど(も)」「たら/れば/なら/ながら/つつ」も体言直結の用法が事実上ない。
     // 濁音の条件形は「んだら」に限定する (読んだら/飲んだら。「だら」だと まだら 等の
     // 体言末尾と衝突する)
+    // 「つつ」単独は「〜しつつあります」の過渡状態と表層分離不能のため含めず、
+    // 逆接が確定する「つつも」のみ扱う (誤確定は誤訳に直結し、保留は hardLimit で
+    // 回収される)。ため / うえで / 上で / 場合 は動詞終端ガード付きで
+    // endsAtClauseBoundary の switch 側が判定する
     static let unconditionalClauseSuffixes: [String] = [
         "ので", "のに", "けど", "けども", "けれど", "けれども",
-        "たら", "んだら", "れば", "なら", "ならば", "ながら", "ながらも", "つつ", "つつも", "ずに",
+        "たら", "んだら", "れば", "なら", "ならば", "ながら", "ながらも", "つつも", "ずに",
         "たものの", "だものの", "ても", "んでも", "いでも",
-        "たため", "だため", "るため", "ないため", "いため",
         "たことから", "ることから", "ないことから", "いことから",
         "たまま", "だまま", "ないまま",
-        "たうえで", "だうえで", "た上で", "だ上で", "たあとで", "だあとで", "た後で", "だ後で",
-        "るうえで", "る上で",
+        "たあとで", "だあとで", "た後で", "だ後で",
     ]
 
     // 表層が接続助詞規則に一致しても節境界でない末尾の負条件 (肯定規則より先に評価する)。
@@ -65,6 +67,7 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
         "ものに", "もので",
         "さんで", "ちゃんで", "くんで",
         "いつから", "くらいから", "ぐらいから",
+        "いくつ", "いつ",
         "なぜなら", "なぜならば", "残念ながら", "しかしながら", "やたら",
         "昔ながら", "我ながら",
         "ほかなら", "他なら", "ばなら", "はなら",
@@ -75,7 +78,7 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
         "けっして",
         "そして", "こうして", "そうして", "かえって", "なんで",
         "新た",
-        "そしたら", "そうしたら", "せめて", "すべて",
+        "そしたら", "そうしたら", "もしかしたら", "ひょっとしたら", "せめて", "すべて",
         "例えば", "たとえば", "そういえば", "あえて", "敢えて",
         "とても", "としても", "にしても", "どうしても", "なんとしても", "とんでも", "なんでも",
         "かねてから", "いたし",
@@ -188,6 +191,18 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
             guard let previous = head.last else { return false }
             return teFormPrecedingCharacters.contains(previous)
         case "で":
+            // 前提の接続節 (確認したうえで/使う上で)。体言接続 (机の上で) と
+            // 区別するため直前が動詞終端のときに限定する
+            if text.hasSuffix("うえで"), let before = text.dropLast(3).last,
+                verbFinalCharacters.contains(before)
+            {
+                return true
+            }
+            if text.hasSuffix("上で"), let before = text.dropLast(2).last,
+                verbFinalCharacters.contains(before)
+            {
+                return true
+            }
             // 音便形「読んで/飲んで」のみ。他の「で」は格助詞が圧倒的に多い。
             // 否定て形「しないで」は「〜ないです」の発話途中の過渡状態と表層分離
             // 不能のため確定しない (誤確定は誤訳に直結し、保留は hardLimit で
@@ -202,6 +217,17 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
             return verbFinalCharacters.contains(previous)
         case "が":
             return endsWithPredicate(head)
+        case "め":
+            // 目的・理由の接続節 (使うため/発生したため/多いため)。体言接続
+            // (そのため/このため) は節頭の接続詞のため直前が動詞・形容詞終端の
+            // ときに限定する
+            guard text.hasSuffix("ため"), let before = text.dropLast(2).last else { return false }
+            return verbFinalCharacters.contains(before)
+        case "合":
+            // 条件の接続節 (発生した場合/変更する場合)。体言接続 (配置の場合) と
+            // 区別するため直前が動詞・形容詞終端のときに限定する
+            guard text.hasSuffix("場合"), let before = text.dropLast(2).last else { return false }
+            return verbFinalCharacters.contains(before)
         case "ば":
             // 五段動詞の条件形 (書けば/話せば/読めば)。え段 + ば に限定する
             // (一段・する の条件形「れば」は無条件サフィックス側で確定済み)
