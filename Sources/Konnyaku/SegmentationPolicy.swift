@@ -66,7 +66,7 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
         "けっして",
         "そして", "こうして", "そうして", "なんで",
         "そしたら", "そうしたら", "せめて", "すべて",
-        "例えば", "たとえば",
+        "例えば", "たとえば", "あえて", "敢えて",
     ]
 
     // 接続助詞「て」の直前に現れうる文字。五段動詞の音便形 (使って/聞いて/読んで)、
@@ -157,7 +157,8 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
         for suffix in unconditionalClauseSuffixes where text.hasSuffix(suffix) {
             return true
         }
-        // volatile 更新ごとに呼ばれる hot path のため Array 化せず末尾参照だけで判定する
+        // volatile 更新ごとに呼ばれる hot path のため、全量の Array 化や String 再構築を
+        // 避け、サフィックス照合と末尾数文字の参照だけで判定する
         guard let last = text.last else { return false }
         let head = text.dropLast()
         switch last {
