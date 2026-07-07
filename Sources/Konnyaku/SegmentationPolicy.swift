@@ -55,6 +55,8 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
         "いつから", "くらいから", "ぐらいから",
         "なぜなら", "残念ながら", "しかしながら", "やたら",
         "どうして", "どうやって", "ただし",
+        "まだ", "ただ",
+        "けっして", "決して", "果たして",
     ]
 
     // 接続助詞「て」の直前に現れうる文字。五段動詞の音便形 (使って/聞いて/読んで)、
@@ -93,6 +95,10 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
             guard let last = text.last else { return false }
             if Self.pausePunctuation.contains(last) {
                 let head = String(text.dropLast())
+                // 負条件 (まだ、/ただ、等の副詞) を述語判定より先に評価する
+                if Self.nonBoundarySuffixes.contains(where: { head.hasSuffix($0) }) {
+                    return false
+                }
                 // 述語直後の読点 (「〜します、」) は文相当の区切りとして確定する
                 if Self.predicateFinalSuffixes.contains(where: { head.hasSuffix($0) }) {
                     return true

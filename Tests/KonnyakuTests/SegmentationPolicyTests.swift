@@ -256,4 +256,18 @@ struct SegmentationPolicyTests {
         let text = "この機能は次のバージョンからすべての利用者に既定で有効になりますただし"
         #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 32))
     }
+
+    // 副詞 + 読点 (「まだ、」) は「だ」が述語終端に一致するが述語ではないため保留する
+    @Test
+    func clauseAwareHoldsOffAtAdverbMadaComma() {
+        let text = "新しい認識モデルへの切り替えは検証が終わっていないのでこの時点ではまだ、"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 32))
+    }
+
+    // 否定副詞 (「決して」) は「し + て」に一致するが後続の述語を修飾するため保留する
+    @Test
+    func clauseAwareHoldsOffAtKesshite() {
+        let text = "この設定を変えても既存の字幕の履歴が消えてしまうことは決して"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 28))
+    }
 }
