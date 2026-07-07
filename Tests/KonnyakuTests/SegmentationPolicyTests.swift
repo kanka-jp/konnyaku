@@ -228,4 +228,32 @@ struct SegmentationPolicyTests {
         let text = "画面の下に出てくる翻訳の字幕はどうしても一行あたりの説明が長くて"
         #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 30))
     }
+
+    // 述語直後の読点 (「…します、」) は文相当の区切りとして確定する
+    @Test
+    func clauseAwareTrueAtCommaAfterPredicate() {
+        let text = "設定の変更はこの画面のスイッチを切り替えるとすぐに本体へ保存します、"
+        #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 32))
+    }
+
+    // 並列の接続助詞 (「増えたし」) は節境界として確定する
+    @Test
+    func clauseAwareTrueAtParallelShi() {
+        let text = "認識の精度は前のバージョンより上がったし対応できる言語の種類も増えたし"
+        #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 32))
+    }
+
+    // 疑問副詞 (「どうして」) は「し + て」に一致するが疑問文の途中のため保留する
+    @Test
+    func clauseAwareHoldsOffAtDoushite() {
+        let text = "設定を切り替えても字幕の表示位置がなかなか変わらないのはどうして"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 30))
+    }
+
+    // 節頭の接続詞 (「ただし」) は「だ + し」に一致するが直後に条件節が続くため保留する
+    @Test
+    func clauseAwareHoldsOffAtTadashi() {
+        let text = "この機能は次のバージョンからすべての利用者に既定で有効になりますただし"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 32))
+    }
 }

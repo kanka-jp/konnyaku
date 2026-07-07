@@ -26,7 +26,8 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
         "、", "。", "，", "．", "！", "？", ",", ".", "!", "?",
     ]
     // 読点は ASR が主題・主語句の直後にも挿入する (「…画面が、」) ため、それ自体は
-    // 文末とみなさず、読点の手前が節境界のときだけ確定する (句点・疑問符等と区別)
+    // 文末とみなさず、読点の手前が節境界または述語終端 (predicateFinalSuffixes) の
+    // ときだけ確定する (句点・疑問符等と区別)
     static let pausePunctuation: Set<Character> = ["、", "，", ","]
 
     // 前後の品詞に依らず節境界とみなせる接続助詞・接続形の末尾。
@@ -53,6 +54,7 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
         "さんで", "ちゃんで", "くんで",
         "いつから", "くらいから", "ぐらいから",
         "なぜなら", "残念ながら", "しかしながら", "やたら",
+        "どうして", "どうやって", "ただし",
     ]
 
     // 接続助詞「て」の直前に現れうる文字。五段動詞の音便形 (使って/聞いて/読んで)、
@@ -65,13 +67,16 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
     ]
 
     // 「〜たから/〜するから」の接続用法を「駅から」の格助詞用法と区別するための
-    // 動詞終端文字 (終止形の u 段 + た/だ/い)
+    // 動詞終端文字 (終止形の u 段 + た/だ/い)。送りがな終端の転成名詞 + から
+    // (「違いから」等) は形容詞 + から (「広いから」) と表層同形のため分別できない
+    // (既知の確定側トレードオフ)
     static let verbFinalCharacters: Set<Character> = [
         "た", "だ", "い", "う", "く", "ぐ", "す", "つ", "ぬ", "ぶ", "む", "る",
     ]
 
-    // 「〜ですが/〜ましたが/〜ませんが」の接続用法を「画面が」の主格用法と区別するための直前パターン
-    static let gaClausePrecedingSuffixes: [String] = ["です", "ます", "ません", "た", "だ", "ない"]
+    // 述語の終端パターン。「が」の接続用法 (〜ですが) を「画面が」の主格用法と区別する
+    // 直前判定と、読点の手前が述語で終わる文相当 (「〜します、」) の判定に共用する
+    static let predicateFinalSuffixes: [String] = ["です", "ます", "ません", "た", "だ", "ない"]
 
     // 閾値超過後、区切りらしい位置なら確定要求する。無ければ閾値の 1.5 倍まで
     // 保留し Speech 側の自然な final 発火を待つ (純関数・テスト対象)
@@ -87,7 +92,12 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
         case .clauseAware:
             guard let last = text.last else { return false }
             if Self.pausePunctuation.contains(last) {
-                return Self.endsAtClauseBoundary(String(text.dropLast()))
+                let head = String(text.dropLast())
+                // 述語直後の読点 (「〜します、」) は文相当の区切りとして確定する
+                if Self.predicateFinalSuffixes.contains(where: { head.hasSuffix($0) }) {
+                    return true
+                }
+                return Self.endsAtClauseBoundary(head)
             }
             if Self.sentenceBreakPunctuation.contains(last) {
                 return true
@@ -124,7 +134,7 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
             guard let previous = head.last else { return false }
             return verbFinalCharacters.contains(previous)
         case "が":
-            return gaClausePrecedingSuffixes.contains { head.hasSuffix($0) }
+            return predicateFinalSuffixes.contains { head.hasSuffix($0) }
         case "ら":
             guard text.hasSuffix("から") else { return false }
             // て形 + から (確認してから) も時間接続の節境界。濁音側は音便形の
