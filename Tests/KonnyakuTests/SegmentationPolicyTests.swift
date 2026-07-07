@@ -328,6 +328,36 @@ struct SegmentationPolicyTests {
         #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 28))
     }
 
+    // 「〜ないです」の過渡状態 (「問題ないで」) は ない の直前が漢字のため保留する
+    @Test
+    func clauseAwareHoldsOffAtNaideTransient() {
+        let text = "新しいモデルに切り替えた後の認識の精度はいまのところ特に問題ないで"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 30))
+    }
+
+    // 否定接続 (「保存せずに」) は節境界として確定する
+    @Test
+    func clauseAwareTrueAtZuni() {
+        let text = "動作を試すだけのときは変更した内容をいったん本体に保存せずに"
+        #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 28))
+    }
+
+    // 「けども」は けど の表層変種として確定する
+    @Test
+    func clauseAwareTrueAtKedomo() {
+        let text = "字幕の表示位置は既定のままでも大きな問題はないと思うんですけども"
+        #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 30))
+    }
+
+    // 固定副詞 (「例えば/すべて」) は え+ば / べ+て に一致するが句の途中のため保留する
+    @Test
+    func clauseAwareHoldsOffAtTatoebaAndSubete() {
+        let tatoeba = "音の環境によって認識の精度は変わるので静かな会議室の場合だと例えば"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: tatoeba, threshold: 30))
+        let subete = "移行を始める前に設定画面に並んでいる必要な項目をまずはすべて"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: subete, threshold: 28))
+    }
+
     // 五段動詞の条件形 (「書けば」等の え段 + ば) は節境界として確定する
     @Test
     func clauseAwareTrueAtGodanConditional() {

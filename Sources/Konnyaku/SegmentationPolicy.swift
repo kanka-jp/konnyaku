@@ -36,8 +36,8 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
     // 濁音の条件形は「んだら」に限定する (読んだら/飲んだら。「だら」だと まだら 等の
     // 体言末尾と衝突する)
     static let unconditionalClauseSuffixes: [String] = [
-        "ので", "のに", "けど", "けれど", "けれども",
-        "たら", "んだら", "れば", "なら", "ながら", "つつ",
+        "ので", "のに", "けど", "けども", "けれど", "けれども",
+        "たら", "んだら", "れば", "なら", "ながら", "つつ", "ずに",
     ]
 
     // 表層が接続助詞規則に一致しても節境界でない末尾の負条件 (肯定規則より先に評価する)。
@@ -58,7 +58,8 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
         "まだ", "ただ",
         "けっして",
         "そして", "こうして", "そうして", "なんで",
-        "そしたら", "そうしたら", "せめて",
+        "そしたら", "そうしたら", "せめて", "すべて",
+        "例えば", "たとえば",
     ]
 
     // 接続助詞「て」の直前に現れうる文字。五段動詞の音便形 (使って/聞いて/読んで)、
@@ -148,8 +149,16 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
             return teFormPrecedingCharacters.contains(previous)
         case "で":
             // 音便形「読んで/飲んで」と否定て形「しないで」のみ。
-            // 他の「で」は格助詞が圧倒的に多い
-            if head.hasSuffix("ない") { return true }
+            // 他の「で」は格助詞が圧倒的に多い。否定て形は ない の直前が
+            // ひらがな (動詞未然形) のときに限定する (「問題ないで」等の
+            // 「〜ないです」の過渡状態は直前が漢字になるため除外される)
+            if head.hasSuffix("ない") {
+                let stem = head.dropLast(2)
+                if let beforeNai = stem.last, ("ぁ"..."ん").contains(beforeNai) {
+                    return true
+                }
+                return false
+            }
             return head.last == "ん"
         case "し":
             // 並列の接続助詞「〜だし/〜ますし/〜ませんし」。かな終端の体言 (むかし 等) と区別
