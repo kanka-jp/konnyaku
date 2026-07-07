@@ -410,4 +410,39 @@ struct SegmentationPolicyTests {
         let text = "この画面では過去の字幕の履歴までは遡って確認できませんから"
         #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 26))
     }
+
+    // 譲歩の接続形 (「変更しても」) は節境界として確定する
+    @Test
+    func clauseAwareTrueAtTemoConcessive() {
+        let text = "アプリを再起動して認識に使う言語の設定を何度か変更しても"
+        #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 24))
+    }
+
+    // 副詞「とても」は「ても」に一致するが程度修飾の途中のため保留する
+    @Test
+    func clauseAwareHoldsOffAtTotemo() {
+        let text = "新しい表示モードでの字幕の読みやすさは前と比べるととても"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 24))
+    }
+
+    // 理由・目的の接続形 (「発生したため」) は節境界として確定する
+    @Test
+    func clauseAwareTrueAtTameClause() {
+        let text = "昨日の夜に認識サーバー側でモデルの配信に障害が発生したため"
+        #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 26))
+    }
+
+    // 接続節 (「確認したうえで」) は節境界として確定する
+    @Test
+    func clauseAwareTrueAtUedeClause() {
+        let text = "移行の前にまず設定画面の項目をひととおり確認したうえで"
+        #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 24))
+    }
+
+    // く終端の副詞 + 読点 (「しばらく、」) は述語ではないため保留する
+    @Test
+    func clauseAwareHoldsOffAtShibarakuComma() {
+        let text = "モデルの切り替えの直後は新しい設定が反映されるまでしばらく、"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 26))
+    }
 }
