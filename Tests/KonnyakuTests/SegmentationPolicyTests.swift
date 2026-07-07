@@ -284,4 +284,18 @@ struct SegmentationPolicyTests {
         let text = "設定を切り替えたのに字幕の表示位置が変わらないのはいったいなんで"
         #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 30))
     }
+
+    // 副詞 (「せめて」) は「め + て」に一致するが後続の述語を修飾するため保留する
+    @Test
+    func clauseAwareHoldsOffAtSemete() {
+        let text = "全部の言語に対応するのは難しいとしても今回のリリースではせめて"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 28))
+    }
+
+    // 丁寧否定の並列 (「できませんし」) は節境界として確定する
+    @Test
+    func clauseAwareTrueAtMasenShi() {
+        let text = "古い端末では新しい認識モデルがそもそも動きませんし"
+        #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 24))
+    }
 }

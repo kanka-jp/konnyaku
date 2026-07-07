@@ -58,7 +58,7 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
         "まだ", "ただ",
         "けっして", "決して", "果たして",
         "そして", "こうして", "そうして", "なんで",
-        "そしたら", "そうしたら",
+        "そしたら", "そうしたら", "せめて",
     ]
 
     // 接続助詞「て」の直前に現れうる文字。五段動詞の音便形 (使って/聞いて/読んで)、
@@ -98,7 +98,7 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
         case .clauseAware:
             guard let last = text.last else { return false }
             if Self.pausePunctuation.contains(last) {
-                let head = String(text.dropLast())
+                let head = text.dropLast()
                 // 負条件 (まだ、/ただ、等の副詞) を述語判定より先に評価する
                 if Self.nonBoundarySuffixes.contains(where: { head.hasSuffix($0) }) {
                     return false
@@ -122,7 +122,7 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
     // 語彙規則で「接続助詞」と「体言 + 格助詞」(駅から / 画面が / 会議室で) を近似分別する。
     // 判定は ASR 出力の書字文字に対して行う (漢字正規化により体言の多くは
     // 漢字終端になり、かな終端を前提とする肯定規則と自然に分離される)
-    static func endsAtClauseBoundary(_ text: String) -> Bool {
+    static func endsAtClauseBoundary(_ text: some StringProtocol) -> Bool {
         for suffix in nonBoundarySuffixes where text.hasSuffix(suffix) {
             return false
         }
@@ -140,7 +140,8 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
             // 音便形「読んで/飲んで」のみ。他の「で」は格助詞が圧倒的に多い
             return head.last == "ん"
         case "し":
-            // 並列の接続助詞「〜だし/〜ますし」。かな終端の体言 (むかし 等) と区別
+            // 並列の接続助詞「〜だし/〜ますし/〜ませんし」。かな終端の体言 (むかし 等) と区別
+            if head.hasSuffix("ません") { return true }
             guard let previous = head.last else { return false }
             return verbFinalCharacters.contains(previous)
         case "が":
