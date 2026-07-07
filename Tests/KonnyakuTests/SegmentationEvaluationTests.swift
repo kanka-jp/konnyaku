@@ -122,35 +122,44 @@ struct SegmentationEvaluationTests {
     // 仮説境界を参照座標へ射影して比較するときの許容窓 (正規化文字数)
     static let boundaryTolerance = 3
 
-    // collector と finalize Task を跨ぐ in-flight flag。production の forcedFinalizeInFlight
-    // (MainActor 隔離) に相当し、finalize 失敗時に解除する契約も揃える
-    private final class ForcedFinalizeFlag: Sendable {
-        private let state = Mutex(false)
-        func get() -> Bool { state.withLock { $0 } }
-        func set(_ newValue: Bool) { state.withLock { $0 = newValue } }
-
-        // false → true を原子的に試行する。collector (volatile 到着) と feed 側
-        // (チャンク供給) の判定が並行しうるため、check-then-set の隙間で
-        // finalize が二重発行されるのを防ぐ
-        func tryAcquire() -> Bool {
-            state.withLock {
-                if $0 { return false }
-                $0 = true
-                return true
-            }
-        }
-    }
-
-    // collector (認識結果) と feed 側 (audio 供給) を跨ぐポーズ判定の共有観測値。
+    // collector (認識結果) と feed 側 (audio 供給) を跨ぐポーズ判定の共有状態。
     // 無音中は volatile が来ず collector 側に判定機会が無いため、feed 側が
-    // 供給チャンクごとに最新 volatile とその audio 終端を読んで判定する
+    // 供給チャンクごとに最新 volatile とその audio 終端を読んで判定する。
+    // force 要求の in-flight flag (production の forcedFinalizeInFlight 相当、
+    // finalize 失敗時に解除する契約も揃える) も同じ Mutex に置き、final 到着の
+    // 状態遷移 (volatile クリア + flag 解除) と acquire を原子化する — 別 lock
+    // だと snapshot〜acquire の間に final が割り込み、終了済みセグメントへ
+    // stale volatile ベースの二重 finalize を発行しうる
     private final class PauseTracker: Sendable {
-        private struct Observation {
+        struct Snapshot {
+            var lastAudioEnd: TimeInterval?
+            var volatileText: String
+            var finalCount: Int
+            var forcedInFlight: Bool
+        }
+
+        private struct State {
             var lastAudioEnd: TimeInterval?
             var volatileText = ""
+            var finalCount = 0
+            var forcedInFlight = false
         }
 
-        private let state = Mutex(Observation())
+        private let state = Mutex(State())
+
+        func snapshot() -> Snapshot {
+            state.withLock {
+                Snapshot(
+                    lastAudioEnd: $0.lastAudioEnd, volatileText: $0.volatileText,
+                    finalCount: $0.finalCount, forcedInFlight: $0.forcedInFlight)
+            }
+        }
+
+        // production の recognitionTask と同じく text guard の前に全結果の audio
+        // 終端を観測する (句読点のみの non-final でも認識活動はあった = 無音でない)
+        func recordAudioActivity(audioEnd: TimeInterval) {
+            state.withLock { $0.lastAudioEnd = audioEnd }
+        }
 
         func recordVolatile(text: String, audioEnd: TimeInterval) {
             state.withLock {
@@ -163,11 +172,23 @@ struct SegmentationEvaluationTests {
             state.withLock {
                 $0.volatileText = ""
                 $0.lastAudioEnd = audioEnd
+                $0.finalCount += 1
+                $0.forcedInFlight = false
             }
         }
 
-        func snapshot() -> (lastAudioEnd: TimeInterval?, volatileText: String) {
-            state.withLock { ($0.lastAudioEnd, $0.volatileText) }
+        // snapshot 時点から final が届いていない場合に限り in-flight を取得する
+        // (final が割り込んでいたら snapshot の volatile は終了済みセグメントのもの)
+        func tryAcquireForceFinalize(ifFinalCountEquals expected: Int) -> Bool {
+            state.withLock {
+                guard $0.finalCount == expected, !$0.forcedInFlight else { return false }
+                $0.forcedInFlight = true
+                return true
+            }
+        }
+
+        func releaseForceFinalize() {
+            state.withLock { $0.forcedInFlight = false }
         }
     }
 
@@ -223,18 +244,25 @@ struct SegmentationEvaluationTests {
         let analyzer = SpeechAnalyzer(inputSequence: stream, modules: [transcriber], options: nil)
 
         let replayStart = ContinuousClock.now
-        let forcedInFlight = ForcedFinalizeFlag()
         let pauseTracker = PauseTracker()
         let fedSecondsBox = Mutex(0.0)
         let collector = Task {
             var result = ReplayResult()
             var currentVolatiles: [String] = []
             for try await item in transcriber.results {
-                let wasForced = forcedInFlight.get()
-                if item.isFinal {
-                    forcedInFlight.set(false)
-                }
+                let wasForced = pauseTracker.snapshot().forcedInFlight
                 let range = Self.audioRange(of: item.text)
+                // 時間属性なし結果は供給時刻へ fallback (production の
+                // lastResultAudioEnd 更新と対称。stale な前セグメント終端で
+                // 見かけのポーズが膨らむのを防ぐ)
+                let resultAudioEnd = range?.end ?? fedSecondsBox.withLock { $0 }
+                // production と同じく text guard の前に全結果を観測する
+                // (句読点のみの結果でも認識活動 = 無音でないことは伝える)
+                if item.isFinal {
+                    pauseTracker.recordFinal(audioEnd: resultAudioEnd)
+                } else {
+                    pauseTracker.recordAudioActivity(audioEnd: resultAudioEnd)
+                }
                 let text = String(item.text.characters)
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                 guard text.contains(where: { $0.isLetter || $0.isNumber }) else {
@@ -242,7 +270,6 @@ struct SegmentationEvaluationTests {
                     // discardVolatileSegment と対)。表示中の volatile が空に消える遷移も
                     // 可視の flicker のため、空文字終端の run として erasure に計上する
                     if item.isFinal {
-                        pauseTracker.recordFinal(audioEnd: range?.end ?? fedSecondsBox.withLock { $0 })
                         if !currentVolatiles.isEmpty {
                             result.volatileRuns.append(currentVolatiles + [""])
                         }
@@ -251,7 +278,6 @@ struct SegmentationEvaluationTests {
                     continue
                 }
                 if item.isFinal {
-                    pauseTracker.recordFinal(audioEnd: range?.end ?? fedSecondsBox.withLock { $0 })
                     let elapsed = (ContinuousClock.now - replayStart).components
                     let arrival = Double(elapsed.seconds) + Double(elapsed.attoseconds) * 1e-18
                     result.finals.append(FinalSegment(
@@ -264,21 +290,18 @@ struct SegmentationEvaluationTests {
                     result.volatileRuns.append(currentVolatiles + [text])
                     currentVolatiles = []
                 } else {
-                    // 時間属性なし結果は供給時刻へ fallback (production の
-                    // lastResultAudioEnd 更新と対称。stale な前セグメント終端で
-                    // 見かけのポーズが膨らむのを防ぐ)
-                    let resultAudioEnd = range?.end ?? fedSecondsBox.withLock { $0 }
                     pauseTracker.recordVolatile(text: text, audioEnd: resultAudioEnd)
                     // production は全 volatile を表示する (翻訳へ流す最小長 filter は
                     // erasure 計算側で適用する)
                     currentVolatiles.append(text)
+                    let snap = pauseTracker.snapshot()
                     let context = SegmentationPolicy.Context(
                         lastResultAudioEnd: resultAudioEnd,
                         audioFedThrough: fedSecondsBox.withLock { $0 })
-                    if !forcedInFlight.get(),
+                    if !snap.forcedInFlight,
                         policy.shouldForceFinalize(
                             text: text, threshold: threshold, context: context),
-                        forcedInFlight.tryAcquire()
+                        pauseTracker.tryAcquireForceFinalize(ifFinalCountEquals: snap.finalCount)
                     {
                         // プロダクション同様、結果ループを塞がないよう別 Task で要求し
                         // (この場で await すると final の消費が止まり deadlock する)、
@@ -286,7 +309,7 @@ struct SegmentationEvaluationTests {
                         // 次の自然 final が forced 誤計上される)
                         Task {
                             if (try? await analyzer.finalize(through: nil)) == nil {
-                                forcedInFlight.set(false)
+                                pauseTracker.releaseForceFinalize()
                             }
                         }
                     }
@@ -304,18 +327,18 @@ struct SegmentationEvaluationTests {
                 // ポーズ駆動の policy は供給チャンクごとにも判定する (current /
                 // clauseAware はテキスト駆動で同一入力に冪等のため実質 no-op)
                 let observation = pauseTracker.snapshot()
-                guard !observation.volatileText.isEmpty, !forcedInFlight.get() else { return }
+                guard !observation.volatileText.isEmpty, !observation.forcedInFlight else { return }
                 let context = SegmentationPolicy.Context(
                     lastResultAudioEnd: observation.lastAudioEnd,
                     audioFedThrough: fedSeconds)
                 if policy.shouldForceFinalize(
                     text: observation.volatileText, threshold: threshold, context: context),
-                    forcedInFlight.tryAcquire()
+                    pauseTracker.tryAcquireForceFinalize(ifFinalCountEquals: observation.finalCount)
                 {
                     // collector 側の要求と同じ契約 (失敗時に flag 解除)
                     Task {
                         if (try? await analyzer.finalize(through: nil)) == nil {
-                            forcedInFlight.set(false)
+                            pauseTracker.releaseForceFinalize()
                         }
                     }
                 }
