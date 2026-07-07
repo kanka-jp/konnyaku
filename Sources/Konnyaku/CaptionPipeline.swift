@@ -5,7 +5,7 @@ import Translation
 
 // 認識エンジンへ供給済みの audio 累積秒。capture callback (非 MainActor) が進め、
 // MainActor の判定側が読むため Mutex で共有する
-final class AudioFeedClock: Sendable {
+private final class AudioFeedClock: Sendable {
     private let seconds = Mutex(0.0)
 
     func advance(bySeconds delta: Double) {

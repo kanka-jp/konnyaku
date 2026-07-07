@@ -185,7 +185,7 @@ struct TranscriptionEvaluationTests {
             locale: locale,
             transcriptionOptions: [],
             reportingOptions: fastResults ? [.fastResults] : [],
-            attributeOptions: []
+            attributeOptions: [.audioTimeRange]
         )
         // クリーンな環境でも動くよう、アプリ本体の prepare と同じく認識モデルを先に導入する
         if let request = try await AssetInventory.assetInstallationRequest(supporting: [transcriber]) {
