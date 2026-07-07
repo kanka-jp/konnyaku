@@ -173,8 +173,9 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
             // 音便形「読んで/飲んで」のみ。他の「で」は格助詞が圧倒的に多い。
             // 否定て形「しないで」は「〜ないです」の発話途中の過渡状態と表層分離
             // 不能のため確定しない (誤確定は誤訳に直結し、保留は hardLimit で
-            // 回収される。否定接続は ずに 側でカバーする)
-            if head.hasSuffix("ない") { return false }
+            // 回収される。否定接続は ずに 側でカバーする)。「ませんで」も
+            // 「ありませんでした」の過渡状態のため同様に確定しない
+            if head.hasSuffix("ない") || head.hasSuffix("ません") { return false }
             return head.last == "ん"
         case "し":
             // 並列の接続助詞「〜だし/〜ますし/〜ませんし」。かな終端の体言 (むかし 等) と区別

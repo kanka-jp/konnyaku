@@ -445,4 +445,11 @@ struct SegmentationPolicyTests {
         let text = "モデルの切り替えの直後は新しい設定が反映されるまでしばらく、"
         #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 26))
     }
+
+    // 「〜ませんでした」の過渡状態 (「ありませんで」) は保留する
+    @Test
+    func clauseAwareHoldsOffAtMasenDeTransient() {
+        let text = "前回の版では認識が止まる問題への恒久的な対応はまだありませんで"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 28))
+    }
 }
