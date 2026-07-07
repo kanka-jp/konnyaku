@@ -614,6 +614,13 @@ struct SegmentationPolicyTests {
         #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 26))
     }
 
+    // 固定の謙譲表現 (「僭越ながら」) は「ながら」に一致するが句の途中のため保留する
+    @Test
+    func clauseAwareHoldsOffAtSenetsuNagara() {
+        let text = "表示の改善の要望についてはこの場を借りて僭越ながら"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 22))
+    }
+
     // 形容動詞の連体形 + 読点 (「新たな、」) は な を剥がしても述語ではないため保留する
     @Test
     func clauseAwareHoldsOffAtAratanaComma() {
