@@ -13,9 +13,9 @@ struct SubtitleView: View {
     // 共有ビューでは調整モードの枠・操作 UI・プレビュー行を出さない (Meet の視聴者に
     // 映る面に管理 UI を混ぜない)
     var showsAdjustmentUI = true
-    // 共有ビューの subtitle-position = top で上寄せにする (画面全体オーバーレイは
-    // ドラッグで自由配置のため常に既定の下寄せ)
-    var alignsToTop = false
+    // settings.subtitlePlacement 依存だと黒帯選択だけで無関係な画面全体オーバーレイの
+    // 上寄せまで無効化されるため、呼び出し元がここで黒帯コンテナかを明示する
+    var isBandContainer = false
     let onFinishMoving: () -> Void
 
     @State private var revealOffset: CGFloat = 0
@@ -27,6 +27,18 @@ struct SubtitleView: View {
 
     private var isAdjusting: Bool {
         settings.isMovable && showsAdjustmentUI
+    }
+
+    // band コンテナは Spacer で外側から位置制御するため常に bottom 寄せ、それ以外 (画面全体
+    // オーバーレイ / 共有ビューの映像重畳) は「字幕の表示位置」設定に従う
+    private var alignsToTop: Bool {
+        Self.resolvedAlignsToTop(isBandContainer: isBandContainer, position: settings.subtitlePosition)
+    }
+
+    nonisolated static func resolvedAlignsToTop(
+        isBandContainer: Bool, position: OverlaySettings.SubtitlePosition
+    ) -> Bool {
+        !isBandContainer && position == .top
     }
 
     var body: some View {
@@ -43,6 +55,13 @@ struct SubtitleView: View {
             }
         }
         .offset(y: revealOffset)
+        // 下寄せロールアップ中に上寄せへ切り替わると古い revealOffset が残り縦位置が
+        // ずれるため、寄せの変化そのものをトリガーに即時リセットする
+        .onChange(of: alignsToTop) { _, _ in
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) { revealOffset = 0 }
+        }
         .onGeometryChange(for: CGFloat.self) { proxy in
             proxy.size.height
         } action: { newHeight in
@@ -61,11 +80,11 @@ struct SubtitleView: View {
             }
         }
         // 操作 UI は調整対象のパネル内に出す (別の固定パネルだと、どのパネルを
-        // 調整しているかとの視覚的な対応が切れる)。字幕は下寄せのため上部が空く
-        .overlay(alignment: .top) {
+        // 調整しているかとの視覚的な対応が切れる)。字幕が寄っていない側の空きに置く
+        .overlay(alignment: alignsToTop ? .bottom : .top) {
             if isAdjusting {
                 MovingControlsView { onFinishMoving() }
-                    .padding(.top, 14)
+                    .padding(alignsToTop ? .bottom : .top, 14)
             }
         }
         .overlay {

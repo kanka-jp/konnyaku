@@ -93,6 +93,16 @@ struct SubtitleViewTests {
             ) == nil)
     }
 
+    // isBandContainer は呼び出し元が明示するフラグで settings.subtitlePlacement に依存しない契約。
+    // 依存させると黒帯選択だけで無関係な画面全体オーバーレイの上寄せが無効化される regression になる
+    @Test
+    func resolvedAlignsToTopFollowsPositionAndIgnoresBandContainerOnly() {
+        #expect(SubtitleView.resolvedAlignsToTop(isBandContainer: false, position: .top))
+        #expect(!SubtitleView.resolvedAlignsToTop(isBandContainer: false, position: .bottom))
+        #expect(!SubtitleView.resolvedAlignsToTop(isBandContainer: true, position: .top))
+        #expect(!SubtitleView.resolvedAlignsToTop(isBandContainer: true, position: .bottom))
+    }
+
     // ゾーン→カーソル方向の対応契約。NSView は非 flipped (y=0 が下端) のため
     // maxY 側が視覚上の上端になる。座標系の取り違え (上下反転) は実機でしか気づけない
     // regression なので純粋関数側で固定する

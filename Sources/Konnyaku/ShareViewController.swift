@@ -481,7 +481,7 @@ struct ShareOverlayView: View {
                     }
                     SubtitleView(
                         state: state, settings: settings, languages: languages,
-                        showsAdjustmentUI: false, onFinishMoving: {}
+                        showsAdjustmentUI: false, isBandContainer: true, onFinishMoving: {}
                     )
                     .frame(height: ShareViewController.bandHeight(fontScale: settings.fontScale))
                     .clipped()
@@ -493,7 +493,6 @@ struct ShareOverlayView: View {
                 SubtitleView(
                     state: state, settings: settings, languages: languages,
                     showsAdjustmentUI: false,
-                    alignsToTop: settings.subtitlePosition == .top,
                     onFinishMoving: {}
                 )
             }

@@ -112,14 +112,19 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                Picker(t("settings.subtitle_position"), selection: Binding(
-                    get: { controller.settings.subtitlePosition },
-                    set: { controller.settings.subtitlePosition = $0 }
-                )) {
-                    Text(t("settings.subtitle_position.bottom"))
-                        .tag(OverlaySettings.SubtitlePosition.bottom)
-                    Text(t("settings.subtitle_position.top"))
-                        .tag(OverlaySettings.SubtitlePosition.top)
+                VStack(alignment: .leading, spacing: 6) {
+                    Picker(t("settings.subtitle_position"), selection: Binding(
+                        get: { controller.settings.subtitlePosition },
+                        set: { controller.settings.subtitlePosition = $0 }
+                    )) {
+                        Text(t("settings.subtitle_position.bottom"))
+                            .tag(OverlaySettings.SubtitlePosition.bottom)
+                        Text(t("settings.subtitle_position.top"))
+                            .tag(OverlaySettings.SubtitlePosition.top)
+                    }
+                    Text(t("settings.subtitle_position.help"))
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
                 }
 
                 Toggle(isOn: Binding(
