@@ -396,11 +396,22 @@ struct SegmentationPolicyTests {
         #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 20))
     }
 
-    // 数詞の助数詞 + が (「ひとつが」) は主語の途中のため保留する
+    // 数詞の助数詞 + が (「ひとつが」「四つが」) は主語の途中のため保留する
     @Test
     func clauseAwareHoldsOffAtCounterGa() {
-        let text = "今回の障害で報告が多かった原因のひとつが"
-        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 18))
+        let hitotsu = "今回の障害で報告が多かった原因のひとつが"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: hitotsu, threshold: 18))
+        let yottsu = "設定の画面に並んでいる項目の四つが"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: yottsu, threshold: 15))
+    }
+
+    // 述語 + としても (「必要だとしても」) は確定し、体言 + としても は保留する
+    @Test
+    func clauseAwareShitemoDistinguishesPredicateAndNoun() {
+        let predicate = "新しいモデルへの切り替えがどうしても必要だとしても"
+        #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: predicate, threshold: 22))
+        let noun = "この問題への対応の方針については私たちの会社としても"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: noun, threshold: 23))
     }
 
     // 副詞 + 読点 (「少しずつ、」) と過渡状態 (「もたら」) は保留する

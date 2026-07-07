@@ -70,9 +70,6 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
         "いつから", "くらいから", "ぐらいから",
         "遠くから", "近くから", "古くから", "早くから",
         "いくつ", "いつ",
-        "ひとつ", "ひとつが", "一つ", "一つが", "1つ", "1つが",
-        "ふたつ", "ふたつが", "二つ", "二つが", "2つ", "2つが",
-        "みっつ", "三つ", "三つが", "3つ", "3つが",
         "なぜなら", "なぜならば", "残念ながら", "しかしながら", "やたら",
         "昔ながら", "我ながら", "依然ながら", "僭越ながら", "陰ながら",
         "ほかなら", "他なら", "ばなら", "はなら",
@@ -111,17 +108,40 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
         "た", "だ", "い", "う", "く", "ぐ", "す", "つ", "ぬ", "ぶ", "む", "る",
     ]
 
+    // 数詞 + 助数詞「つ」の直前に現れる文字 (一つ/2つ/ひとつ/みっつ/ここのつ 等)。
+    // つ 終端の動詞 (勝つ/待つ) は語幹が漢字正規化されるため衝突しない
+    static let counterPrecedingCharacters: Set<Character> = [
+        "一", "二", "三", "四", "五", "六", "七", "八", "九", "十", "何", "幾",
+        "1", "2", "3", "4", "5", "6", "7", "8", "9",
+        "１", "２", "３", "４", "５", "６", "７", "８", "９",
+        "っ", "と", "た", "つ", "な", "の",
+    ]
+
     // 述語で終わるか (「が」の接続用法と「画面が」の主格用法の区別、および読点手前の
     // 文相当判定に共用)。動詞終端文字から「い」を除いた集合 (違い/扱い 等の転成名詞が
     // 主語として頻出するため。長いが 等の形容詞対照は保留側に倒し、否定の ない と
     // 願望の たい は多文字判定で維持) に、ん 終端で文字集合に乗らない「ません」を
-    // 加えた近似
+    // 加えた近似。数詞 + 助数詞「つ」(原因のひとつ/項目の四つ) は体言のため除外する
     static func endsWithPredicate(_ text: some StringProtocol) -> Bool {
         if text.hasSuffix("ません") || text.hasSuffix("ない") || text.hasSuffix("たい") {
             return true
         }
         guard let last = text.last, last != "い" else { return false }
+        if last == "つ", let before = text.dropLast().last,
+            counterPrecedingCharacters.contains(before)
+        {
+            return false
+        }
         return verbFinalCharacters.contains(last)
+    }
+
+    // 述語 + としても/にしても の譲歩節 (必要だとしても/変更するにしても) か。
+    // 体言 + としても (会社としても) は負条件が保留するため、負条件の評価より
+    // 先に呼んで述語形だけを確定する
+    static func endsWithConcessiveShitemo(_ text: some StringProtocol) -> Bool {
+        guard text.hasSuffix("としても") || text.hasSuffix("にしても") else { return false }
+        guard let before = text.dropLast(4).last else { return false }
+        return verbFinalCharacters.contains(before)
     }
 
     // 五段動詞の条件形「〜えば」の直前に現れる え段文字 (書けば/話せば/読めば)。
@@ -164,6 +184,7 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
                 // 読点なしの「ままだ」は「ままだと/ままだった」の過渡状態と分離
                 // 不能のため確定せず、ポーズの証拠がある読点経路に限定する
                 if head.hasSuffix("ままだ") { return true }
+                if Self.endsWithConcessiveShitemo(head) { return true }
                 // 負条件 (まだ、/ただ、等の副詞) を述語判定より先に評価する
                 if Self.nonBoundarySuffixes.contains(where: { head.hasSuffix($0) }) {
                     return false
@@ -186,6 +207,7 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
     // 判定は ASR 出力の書字文字に対して行う (漢字正規化により体言の多くは
     // 漢字終端になり、かな終端を前提とする肯定規則と自然に分離される)
     static func endsAtClauseBoundary(_ text: some StringProtocol) -> Bool {
+        if endsWithConcessiveShitemo(text) { return true }
         for suffix in nonBoundarySuffixes where text.hasSuffix(suffix) {
             return false
         }
