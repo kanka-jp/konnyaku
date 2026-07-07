@@ -55,6 +55,13 @@ struct SubtitleView: View {
             }
         }
         .offset(y: revealOffset)
+        // 下寄せロールアップ中に上寄せへ切り替わると古い revealOffset が残り縦位置が
+        // ずれるため、寄せの変化そのものをトリガーに即時リセットする
+        .onChange(of: alignsToTop) { _, _ in
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) { revealOffset = 0 }
+        }
         .onGeometryChange(for: CGFloat.self) { proxy in
             proxy.size.height
         } action: { newHeight in
