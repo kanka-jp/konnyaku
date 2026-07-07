@@ -158,4 +158,32 @@ struct SegmentationPolicyTests {
         let text = "リリース後の様子を見ながら進めたいので本格的な移行の作業は来月の中旬くらいから"
         #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 38))
     }
+
+    // 濁音の条件形 (「読んだら」) は接続用法として確定する
+    @Test
+    func clauseAwareTrueAtNdara() {
+        let text = "会議で配られた資料をまず参加者が自分のペースでひととおり読んだら"
+        #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 30))
+    }
+
+    // 「だら」終端の体言 (「まだら」) は「んだら」に一致しないため保留する
+    @Test
+    func clauseAwareHoldsOffAtMadara() {
+        let text = "実際に画面を見てみると字幕の背景の黒の濃さが場所によってまだら"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 30))
+    }
+
+    // 音便形 + から (「泳いでから」) は時間接続として確定する
+    @Test
+    func clauseAwareTrueAtIdeKara() {
+        let text = "午前中は体を慣らすためにまずプールの浅いところでひととおり泳いでから"
+        #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 30))
+    }
+
+    // 体言 + 格助詞で + から の過渡状態 (「会議室でから」) は「んでから/いでから」に一致しないため保留する
+    @Test
+    func clauseAwareHoldsOffAtLocativeDeKara() {
+        let text = "次のセッションの受付はさっき案内があった二階の奥にある会議室でから"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 30))
+    }
 }

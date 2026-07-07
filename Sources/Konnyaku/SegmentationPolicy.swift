@@ -28,10 +28,12 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
 
     // 前後の品詞に依らず節境界とみなせる接続助詞・接続形の末尾。
     // 「ので/のに」は体言接続が「なので/なのに」になるため単独で接続用法に確定し、
-    // 「けど/けれど(も)」「たら/れば/なら/ながら/つつ」も体言直結の用法が事実上ない
+    // 「けど/けれど(も)」「たら/れば/なら/ながら/つつ」も体言直結の用法が事実上ない。
+    // 濁音の条件形は「んだら」に限定する (読んだら/飲んだら。「だら」だと まだら 等の
+    // 体言末尾と衝突する)
     static let unconditionalClauseSuffixes: [String] = [
         "ので", "のに", "けど", "けれど", "けれども",
-        "たら", "だら", "れば", "なら", "ながら", "つつ",
+        "たら", "んだら", "れば", "なら", "ながら", "つつ",
     ]
 
     // 表層が接続助詞規則に一致しても節境界でない末尾の負条件 (肯定規則より先に評価する)。
@@ -52,7 +54,7 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
     // 「に」は「〜にて」(格助詞) と衝突するため含めない
     static let teFormPrecedingCharacters: Set<Character> = [
         "っ", "い", "し", "え", "け", "せ", "べ", "め", "ね", "れ", "げ", "て",
-        "き", "ぎ", "じ", "ち", "み", "り", "び", "ひ",
+        "き", "ぎ", "じ", "ち", "み", "り", "び", "ひ", "ぜ", "で",
     ]
 
     // 「〜たから/〜するから」の接続用法を「駅から」の格助詞用法と区別するための
@@ -96,28 +98,32 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
         for suffix in unconditionalClauseSuffixes where text.hasSuffix(suffix) {
             return true
         }
-        let chars = Array(text)
-        guard let last = chars.last else { return false }
+        // volatile 更新ごとに呼ばれる hot path のため Array 化せず末尾参照だけで判定する
+        guard let last = text.last else { return false }
+        let head = text.dropLast()
         switch last {
         case "て":
-            guard chars.count >= 2 else { return false }
-            return teFormPrecedingCharacters.contains(chars[chars.count - 2])
+            guard let previous = head.last else { return false }
+            return teFormPrecedingCharacters.contains(previous)
         case "で":
             // 音便形「読んで/飲んで」のみ。他の「で」は格助詞が圧倒的に多い
-            guard chars.count >= 2 else { return false }
-            return chars[chars.count - 2] == "ん"
+            return head.last == "ん"
         case "し":
             // 並列の接続助詞「〜だし/〜ますし」。かな終端の体言 (むかし 等) と区別
-            guard chars.count >= 2 else { return false }
-            return verbFinalCharacters.contains(chars[chars.count - 2])
+            guard let previous = head.last else { return false }
+            return verbFinalCharacters.contains(previous)
         case "が":
-            let head = String(chars.dropLast())
             return gaClausePrecedingSuffixes.contains { head.hasSuffix($0) }
         case "ら":
-            guard text.hasSuffix("から"), chars.count >= 3 else { return false }
-            // 「確認してから/読んでから」の て形 + から も時間接続の節境界
-            if text.hasSuffix("てから") || text.hasSuffix("でから") { return true }
-            return verbFinalCharacters.contains(chars[chars.count - 3])
+            guard text.hasSuffix("から") else { return false }
+            // て形 + から (確認してから) も時間接続の節境界。濁音側は音便形の
+            // んでから (読んでから) / いでから (泳いでから) に限定する
+            // (裸の「でから」だと体言 + 格助詞で + から の過渡状態と衝突する)
+            if text.hasSuffix("てから") || text.hasSuffix("んでから") || text.hasSuffix("いでから") {
+                return true
+            }
+            guard let beforeKara = text.dropLast(2).last else { return false }
+            return verbFinalCharacters.contains(beforeKara)
         default:
             return false
         }
