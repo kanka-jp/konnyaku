@@ -65,12 +65,14 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
         "さんで", "ちゃんで", "くんで",
         "いつから", "くらいから", "ぐらいから",
         "なぜなら", "なぜならば", "残念ながら", "しかしながら", "やたら",
+        "昔ながら", "我ながら",
         "ほかなら", "他なら", "ばなら", "はなら",
         "どうして", "どうやって", "ただし",
         "まだ", "ただ", "また", "ずつ", "もたら",
         "しばらく", "おそらく", "ようやく", "まったく", "せっかく",
         "けっして",
-        "そして", "こうして", "そうして", "なんで",
+        "そして", "こうして", "そうして", "かえって", "なんで",
+        "新た",
         "そしたら", "そうしたら", "せめて", "すべて",
         "例えば", "たとえば", "そういえば", "あえて", "敢えて",
         "とても", "としても", "にしても", "どうしても", "なんとしても", "とんでも", "なんでも",
@@ -136,6 +138,10 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
             guard let last = tail.last else { return false }
             if Self.pausePunctuation.contains(last) {
                 var head = tail.dropLast()
+                // 引用節直後の読点 (「保存しました」、) も閉じ記号を剥がして判定する
+                while let closer = head.last, Self.closingBrackets.contains(closer) {
+                    head = head.dropLast()
+                }
                 // 終助詞 (「できますね、」) は述語の後ろに付くため、負条件・述語の
                 // 判定より先に透過する (「ただね、」を負条件が見逃さないため)
                 while let particle = head.last, Self.sentenceFinalParticles.contains(particle) {

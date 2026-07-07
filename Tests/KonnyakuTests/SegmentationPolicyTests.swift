@@ -577,4 +577,32 @@ struct SegmentationPolicyTests {
         let text = "長年続けてきた旧形式の配信は本日の更新をもって"
         #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 20))
     }
+
+    // 固定副詞 (「かえって」) は「っ + て」に一致するが後続の述語を修飾するため保留する
+    @Test
+    func clauseAwareHoldsOffAtKaette() {
+        let text = "字幕を大きくしすぎると本番の共有画面ではかえって"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 22))
+    }
+
+    // 引用節直後の読点 (「保存しました」、) は閉じ記号を剥がして述語 + 読点として確定する
+    @Test
+    func clauseAwareTrueAtCommaAfterClosingQuote() {
+        let text = "設定を変更すると画面の上の段に「保存しました」、"
+        #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 22))
+    }
+
+    // 固定の連体形 (「昔ながら」) は「ながら」に一致するが名詞句の途中のため保留する
+    @Test
+    func clauseAwareHoldsOffAtMukashiNagara() {
+        let text = "新しい版でも設定画面の構成は利用者に馴染みのある昔ながら"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 26))
+    }
+
+    // 形容動詞の連体形 + 読点 (「新たな、」) は な を剥がしても述語ではないため保留する
+    @Test
+    func clauseAwareHoldsOffAtAratanaComma() {
+        let text = "次の版では字幕の表示にこれまでになかった新たな、"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 22))
+    }
 }
