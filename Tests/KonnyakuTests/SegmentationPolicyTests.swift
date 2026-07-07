@@ -298,4 +298,25 @@ struct SegmentationPolicyTests {
         let text = "古い端末では新しい認識モデルがそもそも動きませんし"
         #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 24))
     }
+
+    // 否定のて形 (「保存しないで」) は節境界として確定する
+    @Test
+    func clauseAwareTrueAtNegativeTeForm() {
+        let text = "動作を試すだけのときは画面の下のボタンから設定を保存しないで"
+        #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 28))
+    }
+
+    // 五段動詞の条件形 (「書けば」等の え段 + ば) は節境界として確定する
+    @Test
+    func clauseAwareTrueAtGodanConditional() {
+        let text = "認識がうまくいかないときは設定画面から辞書に読み方を書けば"
+        #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 26))
+    }
+
+    // 丁寧否定の理由節 (「できませんから」) は節境界として確定する
+    @Test
+    func clauseAwareTrueAtMasenKara() {
+        let text = "この画面では過去の字幕の履歴までは遡って確認できませんから"
+        #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 26))
+    }
 }

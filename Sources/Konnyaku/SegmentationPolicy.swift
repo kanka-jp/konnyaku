@@ -84,6 +84,11 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
     // 直前判定と、読点の手前が述語で終わる文相当 (「〜します、」) の判定に共用する
     static let predicateFinalSuffixes: [String] = ["です", "ます", "ません", "た", "だ", "ない"]
 
+    // 五段動詞の条件形「〜えば」の直前に現れる え段文字 (書けば/話せば/読めば)
+    static let ebaRowCharacters: Set<Character> = [
+        "え", "け", "げ", "せ", "ぜ", "て", "で", "ね", "べ", "め", "れ", "へ",
+    ]
+
     // 閾値超過後、区切りらしい位置なら確定要求する。無ければ閾値の 1.5 倍まで
     // 保留し Speech 側の自然な final 発火を待つ (純関数・テスト対象)
     func shouldForceFinalize(text: String, threshold: Int) -> Bool {
@@ -137,7 +142,9 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
             guard let previous = head.last else { return false }
             return teFormPrecedingCharacters.contains(previous)
         case "で":
-            // 音便形「読んで/飲んで」のみ。他の「で」は格助詞が圧倒的に多い
+            // 音便形「読んで/飲んで」と否定て形「しないで」のみ。
+            // 他の「で」は格助詞が圧倒的に多い
+            if head.hasSuffix("ない") { return true }
             return head.last == "ん"
         case "し":
             // 並列の接続助詞「〜だし/〜ますし/〜ませんし」。かな終端の体言 (むかし 等) と区別
@@ -146,6 +153,11 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
             return verbFinalCharacters.contains(previous)
         case "が":
             return predicateFinalSuffixes.contains { head.hasSuffix($0) }
+        case "ば":
+            // 五段動詞の条件形 (書けば/話せば/読めば)。え段 + ば に限定する
+            // (一段・する の条件形「れば」は無条件サフィックス側で確定済み)
+            guard let previous = head.last else { return false }
+            return ebaRowCharacters.contains(previous)
         case "ら":
             guard text.hasSuffix("から") else { return false }
             // て形 + から (確認してから) も時間接続の節境界。濁音側は音便形の
@@ -154,6 +166,8 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
             if text.hasSuffix("てから") || text.hasSuffix("んでから") || text.hasSuffix("いでから") {
                 return true
             }
+            // 丁寧否定の理由節 (対応できませんから)。ん は動詞終端集合外のため個別に扱う
+            if text.hasSuffix("ませんから") { return true }
             guard let beforeKara = text.dropLast(2).last else { return false }
             return verbFinalCharacters.contains(beforeKara)
         default:
