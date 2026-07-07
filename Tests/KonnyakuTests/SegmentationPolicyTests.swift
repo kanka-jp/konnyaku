@@ -621,6 +621,81 @@ struct SegmentationPolicyTests {
         #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 22))
     }
 
+    // 目的の接続節 (「使うために」) は確定し、節頭の「そのために」は保留する
+    @Test
+    func clauseAwareTrueAtTameni() {
+        let tsukau = "新しい認識モデルを次の版でも続けて使うために"
+        #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: tsukau, threshold: 20))
+        let sonotameni = "認識は端末の性能に依存していますそのために"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: sonotameni, threshold: 18))
+    }
+
+    // 連体の な + 場合 (「必要な場合」) と主題化 (「した場合は」) は確定する
+    @Test
+    func clauseAwareTrueAtNaBaaiAndBaaiwa() {
+        let naBaai = "認識モデルの再取得がどうしても必要な場合"
+        #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: naBaai, threshold: 18))
+        let baaiwa = "共有ビューの表示中にエラーが発生した場合は"
+        #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: baaiwa, threshold: 18))
+    }
+
+    // 固定の時間表現 (「また後で」) は「た後で」に一致するが句の途中のため保留する
+    @Test
+    func clauseAwareHoldsOffAtMataAtode() {
+        let text = "この設定の詳しい説明は時間が足りないのでまた後で"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 22))
+    }
+
+    // 時間副詞 + 読点 (「すぐ、」) は述語ではないため保留する
+    @Test
+    func clauseAwareHoldsOffAtSuguComma() {
+        let text = "設定の変更は保存のボタンを押すとすぐ、"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 16))
+    }
+
+    // ひらがな代名詞 (「わたし」) は「た + し」に一致するが体言のため保留する
+    @Test
+    func clauseAwareHoldsOffAtWatashi() {
+        let text = "次の定例で新機能の説明を担当するのはわたし"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 18))
+    }
+
+    // 起点の固定形 (「古くから」) は保留し、動詞終止形 (「行くから」) は確定する
+    @Test
+    func clauseAwareKaraDistinguishesFixedAndVerb() {
+        let furuku = "この形式の字幕は放送の分野では古くから"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: furuku, threshold: 16))
+        let iku = "資料は私が先に会場へ持って行くから"
+        #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: iku, threshold: 15))
+    }
+
+    // 様態・目的の接続節 (「なるように」) は確定し、指示の「このように」は保留する
+    @Test
+    func clauseAwareTrueAtYouni() {
+        let naruyouni = "画面の字幕が離れた席からでも見やすくなるように"
+        #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: naruyouni, threshold: 20))
+        let konoyouni = "下側の帯の配置では字幕は黒い帯の中にこのように"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: konoyouni, threshold: 20))
+    }
+
+    // 時間の接続節 (「終わるまで」) は確定し、固定副詞 (「あくまで」) は保留する
+    @Test
+    func clauseAwareTrueAtMadeClause() {
+        let owaru = "共有ビューの録画は会議のすべての議題が終わるまで"
+        #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: owaru, threshold: 21))
+        let akumade = "この数値は参考のための目安であってあくまで"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: akumade, threshold: 18))
+    }
+
+    // 時・条件の接続節 (「出たとき」「確認した後に」) は節境界として確定する
+    @Test
+    func clauseAwareTrueAtTokiAndAtoni() {
+        let toki = "共有ビューの表示中に認識のエラーが出たとき"
+        #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: toki, threshold: 18))
+        let atoni = "移行の前にまず設定画面の項目を確認した後に"
+        #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: atoni, threshold: 18))
+    }
+
     // 形容動詞の連体形 + 読点 (「新たな、」) は な を剥がしても述語ではないため保留する
     @Test
     func clauseAwareHoldsOffAtAratanaComma() {

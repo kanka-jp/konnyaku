@@ -68,6 +68,7 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
         "ものに", "もので",
         "さんで", "ちゃんで", "くんで",
         "いつから", "くらいから", "ぐらいから",
+        "遠くから", "近くから", "古くから", "早くから",
         "いくつ", "いつ",
         "ひとつ", "ひとつが", "一つ", "一つが", "1つ", "1つが",
         "ふたつ", "ふたつが", "二つ", "二つが", "2つ", "2つが",
@@ -78,7 +79,10 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
         "どうして", "どうやって", "どうしたら", "どうすれば", "ただし",
         "ほうが",
         "まだ", "ただ", "また", "ずつ", "もたら",
+        "また後で", "またあとで", "ただ後で", "ただあとで",
         "しばらく", "おそらく", "ようやく", "まったく", "せっかく",
+        "すぐ", "まもなく", "あくまで",
+        "わたし", "あたし",
         "けっして",
         "そして", "こうして", "そうして", "もしかして", "ひょっとして", "かえって", "なんで",
         "新た",
@@ -209,6 +213,13 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
             {
                 return true
             }
+            // 時間の接続節 (処理が終わるまで)。体言接続 (駅まで) と区別するため
+            // 直前が動詞終端のときに限定する (固定副詞 あくまで は負条件で除外)
+            if text.hasSuffix("まで"), let before = text.dropLast(2).last,
+                verbFinalCharacters.contains(before)
+            {
+                return true
+            }
             // 音便形「読んで/飲んで」のみ。他の「で」は格助詞が圧倒的に多い。
             // 否定て形「しないで」は「〜ないです」の発話途中の過渡状態と表層分離
             // 不能のため確定しない (誤確定は誤訳に直結し、保留は hardLimit で
@@ -224,16 +235,50 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
         case "が":
             return endsWithPredicate(head)
         case "め":
-            // 目的・理由の接続節 (使うため/発生したため/多いため)。体言接続
-            // (そのため/このため) は節頭の接続詞のため直前が動詞・形容詞終端の
-            // ときに限定する
+            // 目的・理由の接続節 (使うため/発生したため/多いため/必要なため)。
+            // 体言接続 (そのため/このため) は節頭の接続詞のため直前が動詞・形容詞
+            // 終端または連体の な のときに限定する
             guard text.hasSuffix("ため"), let before = text.dropLast(2).last else { return false }
-            return verbFinalCharacters.contains(before)
+            return verbFinalCharacters.contains(before) || before == "な"
         case "合":
-            // 条件の接続節 (発生した場合/変更する場合)。体言接続 (配置の場合) と
-            // 区別するため直前が動詞・形容詞終端のときに限定する
+            // 条件の接続節 (発生した場合/変更する場合/必要な場合)。体言接続
+            // (配置の場合) と区別するため直前が動詞・形容詞終端または連体の な の
+            // ときに限定する
             guard text.hasSuffix("場合"), let before = text.dropLast(2).last else { return false }
+            return verbFinalCharacters.contains(before) || before == "な"
+        case "は":
+            // 主題化された条件節 (発生した場合は)。体言 + の場合は は保留する
+            guard text.hasSuffix("場合は"), let before = text.dropLast(3).last else { return false }
+            return verbFinalCharacters.contains(before) || before == "な"
+        case "に":
+            // 目的・様態・時間の接続節 (使うために/なるように/確認した後に/始める前に)。
+            // 体言接続 (そのために/このように) は直前が の になるため動詞・形容詞
+            // 終端 (ために は連体の な も) に限定する
+            if text.hasSuffix("ために"), let before = text.dropLast(3).last {
+                return verbFinalCharacters.contains(before) || before == "な"
+            }
+            if text.hasSuffix("ように"), let before = text.dropLast(3).last {
+                return verbFinalCharacters.contains(before)
+            }
+            if text.hasSuffix("後に") || text.hasSuffix("前に") {
+                guard let before = text.dropLast(2).last else { return false }
+                return verbFinalCharacters.contains(before)
+            }
+            if text.hasSuffix("あとに") || text.hasSuffix("まえに") {
+                guard let before = text.dropLast(3).last else { return false }
+                return verbFinalCharacters.contains(before)
+            }
+            return false
+        case "き":
+            // 時・条件の接続節 (エラーが出たとき/機能を使うとき)。体言接続
+            // (ひととき 等) と区別するため直前が動詞・形容詞終端のときに限定する
+            guard text.hasSuffix("とき"), let before = text.dropLast(2).last else { return false }
             return verbFinalCharacters.contains(before)
+        case "時":
+            // とき の漢字正規化形 (出た時/使う時)。当時/一時 等の漢語は直前が
+            // 漢字のため発火しない
+            guard let previous = head.last else { return false }
+            return verbFinalCharacters.contains(previous)
         case "ば":
             // 五段動詞の条件形 (書けば/話せば/読めば)。え段 + ば に限定する
             // (一段・する の条件形「れば」は無条件サフィックス側で確定済み)
