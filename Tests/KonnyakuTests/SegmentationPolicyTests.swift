@@ -270,4 +270,18 @@ struct SegmentationPolicyTests {
         let text = "この設定を変えても既存の字幕の履歴が消えてしまうことは決して"
         #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 28))
     }
+
+    // 節頭の接続詞 (「そして」) は「し + て」に一致するが直後に節が続くため保留する
+    @Test
+    func clauseAwareHoldsOffAtSoshite() {
+        let text = "まず音声認識のモデルを読み込んで準備ができたことを確認しますそして"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 30))
+    }
+
+    // 疑問詞 (「なんで」) は「ん + で」に一致するが疑問文の途中のため保留する
+    @Test
+    func clauseAwareHoldsOffAtNande() {
+        let text = "設定を切り替えたのに字幕の表示位置が変わらないのはいったいなんで"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 30))
+    }
 }
