@@ -358,6 +358,31 @@ struct SegmentationPolicyTests {
         #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: subete, threshold: 28))
     }
 
+    // 転成名詞の主語 (「違いが」) は い 終端だが述語ではないため保留する
+    @Test
+    func clauseAwareHoldsOffAtDeverbalNounGa() {
+        let text = "同じ音声でも認識モデルの版による細かい挙動や結果の違いが"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 26))
+    }
+
+    // 逆接の接続形 (「したものの/抱えながらも」) は節境界として確定する
+    @Test
+    func clauseAwareTrueAtMononoAndNagaramo() {
+        let monono = "先週のリリースで認識が止まる問題には修正を入れたものの"
+        #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: monono, threshold: 24))
+        let nagaramo = "実行速度の面ではまだいくつかの課題を抱えながらも"
+        #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: nagaramo, threshold: 22))
+    }
+
+    // 副詞 + 読点 (「少しずつ、」) と過渡状態 (「もたら」) は保留する
+    @Test
+    func clauseAwareHoldsOffAtZutsuCommaAndMotara() {
+        let zutsu = "設定の変更は再起動を待たずにこの画面の項目から少しずつ、"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: zutsu, threshold: 26))
+        let motara = "今回の変更が字幕の読みやすさにどれだけの改善をもたら"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: motara, threshold: 24))
+    }
+
     // 五段動詞の条件形 (「書けば」等の え段 + ば) は節境界として確定する
     @Test
     func clauseAwareTrueAtGodanConditional() {

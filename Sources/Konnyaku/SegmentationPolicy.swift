@@ -37,7 +37,8 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
     // 体言末尾と衝突する)
     static let unconditionalClauseSuffixes: [String] = [
         "ので", "のに", "けど", "けども", "けれど", "けれども",
-        "たら", "んだら", "れば", "なら", "ながら", "つつ", "ずに",
+        "たら", "んだら", "れば", "なら", "ながら", "ながらも", "つつ", "ずに",
+        "ものの",
     ]
 
     // 表層が接続助詞規則に一致しても節境界でない末尾の負条件 (肯定規則より先に評価する)。
@@ -49,13 +50,14 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
         "について", "として", "において", "にとって", "によって",
         "に関して", "に対して", "をめぐって", "に向けて", "につれて",
         "に基づいて", "に応じて", "に沿って", "にわたって", "に従って", "に加えて",
+        "を通じて", "を通して",
         "改めて", "初めて", "極めて",
         "ものに", "もので",
         "さんで", "ちゃんで", "くんで",
         "いつから", "くらいから", "ぐらいから",
         "なぜなら", "残念ながら", "しかしながら", "やたら",
         "どうして", "どうやって", "ただし",
-        "まだ", "ただ",
+        "まだ", "ただ", "ずつ", "もたら",
         "けっして",
         "そして", "こうして", "そうして", "なんで",
         "そしたら", "そうしたら", "せめて", "すべて",
@@ -82,11 +84,12 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
     ]
 
     // 述語で終わるか (「が」の接続用法と「画面が」の主格用法の区別、および読点手前の
-    // 文相当判定に共用)。動詞終端文字 (辞書形 u 段 + た/だ/い — です/ます/ない の
-    // 末尾も包含する) に、ん 終端で文字集合に乗らない「ません」を加えた近似
+    // 文相当判定に共用)。動詞終端文字から「い」を除いた集合 (違い/扱い 等の転成名詞が
+    // 主語として頻出するため。長いが 等の形容詞対照は保留側に倒し、否定の ない は
+    // 多文字判定で維持) に、ん 終端で文字集合に乗らない「ません」を加えた近似
     static func endsWithPredicate(_ text: some StringProtocol) -> Bool {
-        if text.hasSuffix("ません") { return true }
-        guard let last = text.last else { return false }
+        if text.hasSuffix("ません") || text.hasSuffix("ない") { return true }
+        guard let last = text.last, last != "い" else { return false }
         return verbFinalCharacters.contains(last)
     }
 
