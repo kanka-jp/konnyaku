@@ -321,18 +321,32 @@ struct SegmentationPolicyTests {
         #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 24))
     }
 
-    // 否定のて形 (「保存しないで」) は節境界として確定する
+    // 否定のて形 (「保存しないで」) は「〜ないです」の過渡状態と表層分離不能のため保留する
     @Test
-    func clauseAwareTrueAtNegativeTeForm() {
+    func clauseAwareHoldsOffAtNegativeTeForm() {
         let text = "動作を試すだけのときは画面の下のボタンから設定を保存しないで"
-        #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 28))
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 28))
     }
 
-    // 「〜ないです」の過渡状態 (「問題ないで」) は ない の直前が漢字のため保留する
+    // 「〜ないです」の過渡状態 (「問題ないで」) は保留する
     @Test
     func clauseAwareHoldsOffAtNaideTransient() {
         let text = "新しいモデルに切り替えた後の認識の精度はいまのところ特に問題ないで"
         #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 30))
+    }
+
+    // 閉じ引用符付きの句点 (「…します。」) は閉じ記号を剥がして文末として確定する
+    @Test
+    func clauseAwareTrueAtPunctuationBeforeClosingQuote() {
+        let text = "処理が終わると画面の上の段に「認識が完了しました。」"
+        #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 22))
+    }
+
+    // 終助詞 + 読点 (「できますね、」) は終助詞を透過して述語 + 読点として確定する
+    @Test
+    func clauseAwareTrueAtFinalParticleComma() {
+        let text = "変更した内容はこの画面の右下のボタンからいつでも保存できますね、"
+        #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 30))
     }
 
     // 否定接続 (「保存せずに」) は節境界として確定する

@@ -29,6 +29,11 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
     // 文末とみなさず、読点の手前が節境界または述語終端 (endsWithPredicate) の
     // ときだけ確定する (句点・疑問符等と区別)
     static let pausePunctuation: Set<Character> = ["、", "，", ","]
+    // 引用・括弧の閉じ記号。句読点の後ろに続く (「…します。」) と末尾アンカー判定を
+    // 隠すため、判定前に剥がす
+    static let closingBrackets: Set<Character> = ["」", "』", "）", ")", "]", "】", "〉", "》", "\""]
+    // 文末の終助詞。述語の後ろに付く (「できますね、」) ため読点手前の述語判定で透過する
+    static let sentenceFinalParticles: Set<Character> = ["ね", "よ", "か", "な"]
 
     // 前後の品詞に依らず節境界とみなせる接続助詞・接続形の末尾。
     // 「ので/のに」は体言接続が「なので/なのに」になるため単独で接続用法に確定し、
@@ -110,14 +115,23 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
             return text.suffix(Self.punctuationTailWindow)
                 .contains { Self.sentenceBreakPunctuation.contains($0) }
         case .clauseAware:
-            guard let last = text.last else { return false }
+            // 閉じ括弧・閉じ引用符 (「…します。」) は句読点判定を隠すため先に剥がす
+            var tail = Substring(text)
+            while let closer = tail.last, Self.closingBrackets.contains(closer) {
+                tail = tail.dropLast()
+            }
+            guard let last = tail.last else { return false }
             if Self.pausePunctuation.contains(last) {
-                let head = text.dropLast()
+                var head = tail.dropLast()
                 // コピュラ述語「〜ままだ、」は副詞「まだ」の負条件より先に確定する
                 if head.hasSuffix("ままだ") { return true }
                 // 負条件 (まだ、/ただ、等の副詞) を述語判定より先に評価する
                 if Self.nonBoundarySuffixes.contains(where: { head.hasSuffix($0) }) {
                     return false
+                }
+                // 終助詞 (「できますね、」) は述語の後ろに付くため透過する
+                while let particle = head.last, Self.sentenceFinalParticles.contains(particle) {
+                    head = head.dropLast()
                 }
                 // 述語直後の読点 (「〜します、」) は文相当の区切りとして確定する
                 if Self.endsWithPredicate(head) { return true }
@@ -126,7 +140,7 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
             if Self.sentenceBreakPunctuation.contains(last) {
                 return true
             }
-            return Self.endsAtClauseBoundary(text)
+            return Self.endsAtClauseBoundary(tail)
         }
     }
 
@@ -151,17 +165,11 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
             guard let previous = head.last else { return false }
             return teFormPrecedingCharacters.contains(previous)
         case "で":
-            // 音便形「読んで/飲んで」と否定て形「しないで」のみ。
-            // 他の「で」は格助詞が圧倒的に多い。否定て形は ない の直前が
-            // ひらがな (動詞未然形) のときに限定する (「問題ないで」等の
-            // 「〜ないです」の過渡状態は直前が漢字になるため除外される)
-            if head.hasSuffix("ない") {
-                let stem = head.dropLast(2)
-                if let beforeNai = stem.last, ("ぁ"..."ん").contains(beforeNai) {
-                    return true
-                }
-                return false
-            }
+            // 音便形「読んで/飲んで」のみ。他の「で」は格助詞が圧倒的に多い。
+            // 否定て形「しないで」は「〜ないです」の発話途中の過渡状態と表層分離
+            // 不能のため確定しない (誤確定は誤訳に直結し、保留は hardLimit で
+            // 回収される。否定接続は ずに 側でカバーする)
+            if head.hasSuffix("ない") { return false }
             return head.last == "ん"
         case "し":
             // 並列の接続助詞「〜だし/〜ますし/〜ませんし」。かな終端の体言 (むかし 等) と区別
