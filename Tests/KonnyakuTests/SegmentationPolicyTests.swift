@@ -379,13 +379,28 @@ struct SegmentationPolicyTests {
         #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 26))
     }
 
-    // 逆接の接続形 (「したものの/抱えながらも」) は節境界として確定する
+    // 逆接の接続形 (「抱えながらも」) は確定し、「たものの」は連体修飾
+    // (「入れたものの一覧」) と表層分離不能のため保留する
     @Test
-    func clauseAwareTrueAtMononoAndNagaramo() {
-        let monono = "先週のリリースで認識が止まる問題には修正を入れたものの"
-        #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: monono, threshold: 24))
+    func clauseAwareTrueAtNagaramoAndHoldsOffAtMonono() {
         let nagaramo = "実行速度の面ではまだいくつかの課題を抱えながらも"
         #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: nagaramo, threshold: 22))
+        let monono = "先週のリリースで認識が止まる問題には修正を入れたものの"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: monono, threshold: 24))
+    }
+
+    // 譲歩の固定接続 (「したにもかかわらず」) は節境界として確定する
+    @Test
+    func clauseAwareTrueAtNimokakawarazu() {
+        let text = "事前に設定の内容を何度も確認したにもかかわらず"
+        #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 20))
+    }
+
+    // 数詞の助数詞 + が (「ひとつが」) は主語の途中のため保留する
+    @Test
+    func clauseAwareHoldsOffAtCounterGa() {
+        let text = "今回の障害で報告が多かった原因のひとつが"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 18))
     }
 
     // 副詞 + 読点 (「少しずつ、」) と過渡状態 (「もたら」) は保留する
