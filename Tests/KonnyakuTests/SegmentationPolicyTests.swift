@@ -491,4 +491,46 @@ struct SegmentationPolicyTests {
         let text = "認識モデルの差し替えに備えた仕組みの見直しはこの機能ではかねてから"
         #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 30))
     }
+
+    // 固定表現「にほかならない」の過渡状態 (「にほかなら」) は「なら」に一致するが保留する
+    @Test
+    func clauseAwareHoldsOffAtHokanaraTransient() {
+        let text = "この問題の原因は設定ファイルの記述の不備にほかなら"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 24))
+    }
+
+    // 譲歩の接続形 (「進めつつも」) は節境界として確定する
+    @Test
+    func clauseAwareTrueAtTsutsumo() {
+        let text = "利用者からの意見を集めて画面の表示の改善を進めつつも"
+        #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 24))
+    }
+
+    // 条件の接続形 (「必要ならば」) は節境界として確定する
+    @Test
+    func clauseAwareTrueAtNaraba() {
+        let text = "認識のモデルを新しい版へ切り替える対応がもし必要ならば"
+        #expect(SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 26))
+    }
+
+    // 代名詞的な「なんでも」は音便形の譲歩「んでも」に一致するが句の途中のため保留する
+    @Test
+    func clauseAwareHoldsOffAtNandemo() {
+        let text = "設定の画面では表示に関わる項目を利用者がなんでも"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 22))
+    }
+
+    // 謙譲の「いたします」の過渡状態 (「お配りいたし」) は並列の「し」に一致するが保留する
+    @Test
+    func clauseAwareHoldsOffAtItashiTransient() {
+        let text = "資料の準備ができましたので後ほど会場でお配りいたし"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 24))
+    }
+
+    // 談話標識「そういえば」は条件形の「えば」に一致するが句の途中のため保留する
+    @Test
+    func clauseAwareHoldsOffAtSouieba() {
+        let text = "字幕の表示の設定について説明しようと思ったんですがそういえば"
+        #expect(!SegmentationPolicy.clauseAware.shouldForceFinalize(text: text, threshold: 28))
+    }
 }
