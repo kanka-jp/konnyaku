@@ -37,7 +37,7 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
 
     // 前後の品詞に依らず節境界とみなせる接続助詞・接続形の末尾。
     // 「ので/のに」は体言接続が「なので/なのに」になるため単独で接続用法に確定し、
-    // 「けど/けれど(も)」「たら/れば/なら/ながら/つつ」も体言直結の用法が事実上ない。
+    // 「けど/けれど(も)」「たら/れば/なら/ながら」も体言直結の用法が事実上ない。
     // 濁音の条件形は「んだら」に限定する (読んだら/飲んだら。「だら」だと まだら 等の
     // 体言末尾と衝突する)
     // 「つつ」単独は「〜しつつあります」の過渡状態と表層分離不能のため含めず、
@@ -152,7 +152,9 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
                 while let particle = head.last, Self.sentenceFinalParticles.contains(particle) {
                     head = head.dropLast()
                 }
-                // コピュラ述語「〜ままだ、」は副詞「まだ」の負条件より先に確定する
+                // コピュラ述語「〜ままだ、」は副詞「まだ」の負条件より先に確定する。
+                // 読点なしの「ままだ」は「ままだと/ままだった」の過渡状態と分離
+                // 不能のため確定せず、ポーズの証拠がある読点経路に限定する
                 if head.hasSuffix("ままだ") { return true }
                 // 負条件 (まだ、/ただ、等の副詞) を述語判定より先に評価する
                 if Self.nonBoundarySuffixes.contains(where: { head.hasSuffix($0) }) {
