@@ -70,18 +70,24 @@ enum EvalAudio {
 
     // アプリ本体と同じ AVAudioConverter 経路でファイルを analyzer の入力へ流し込む。
     // pacedRealtime は live のタイミング再現が要る評価 (区切り判定・レイテンシ測定) 用で、
-    // タイミング無関係な CER 評価は off (faster-than-realtime) で回す
+    // タイミング無関係な CER 評価は off (faster-than-realtime) で回す。
+    // onChunkFed は各バッファ供給直後に供給済み累積秒を通知する (pauseAware の
+    // ポーズ判定は無音中に volatile が来ず判定機会が無いため、供給側で発火させる)。
+    // onChunkFed でポーズ判定する場合は pacedRealtime: true と併用すること —
+    // faster-than-realtime では供給が認識に先行し、見かけのポーズで誤発火する
     static func feed(
         url: URL,
         into continuation: AsyncStream<AnalyzerInput>.Continuation,
         analyzerFormat: AVAudioFormat,
-        pacedRealtime: Bool = false
+        pacedRealtime: Bool = false,
+        onChunkFed: (@Sendable (TimeInterval) -> Void)? = nil
     ) async throws {
         let file = try AVAudioFile(forReading: url)
         let sourceFormat = file.processingFormat
         guard let converter = AVAudioConverter(from: sourceFormat, to: analyzerFormat) else {
             throw KonnyakuError.audioConverterUnavailable
         }
+        var fedSeconds: TimeInterval = 0
         while file.framePosition < file.length {
             // production tap (AudioCaptureEngine の bufferSize: 4096) と同じ粒度で届ける
             // (粗いチャンクだと paced 時の配信間隔が live の 2 倍になり lag 計測がずれる)
@@ -101,6 +107,11 @@ enum EvalAudio {
             }
             if let converted = AudioCaptureEngine.convert(buffer, with: converter, to: analyzerFormat) {
                 continuation.yield(AnalyzerInput(buffer: converted))
+                // production の AudioFeedClock と同じく変換後バッファで累積する
+                // (audioTimeRange は analyzer 入力時間軸のため、source 時間軸だと
+                // resampling の per-chunk 丸めで時間基準がずれる)
+                fedSeconds += Double(converted.frameLength) / analyzerFormat.sampleRate
+                onChunkFed?(fedSeconds)
             } else {
                 // 黙殺すると timing / CER 計測が静かに歪むため可視化する (best-effort 続行)
                 print("EvalAudio.feed: dropped unconvertible buffer at frame \(file.framePosition)")

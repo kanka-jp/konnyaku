@@ -2,7 +2,7 @@ import Foundation
 
 // 強制確定 (段落を待たず文を区切る) の判定ポリシー。app と eval が同一実装を共有し、
 // eval (SegmentationEvaluationTests) は複数 case を同一音声で A/B 比較する
-enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
+enum SegmentationPolicy: CaseIterable, CustomStringConvertible, Equatable {
     // 文字数閾値 + 末尾句読点 (末尾 10 字以内) + 1.5 倍ハードリミット
     case current
     // 文字数閾値 + 末尾アンカーの節境界判定 + 1.5 倍ハードリミット。
@@ -10,11 +10,39 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
     // 語中分断を招くため、末尾そのものが区切りのときだけ確定する。
     // 日→英 (SOV→SVO) では動詞前の分断が訳を壊すため節境界で切る
     case clauseAware
+    // 文字数閾値 + 音響ポーズ (最新認識結果の audio 終端と供給済み audio 時刻の差が
+    // silenceMs 以上) + 1.5 倍ハードリミット。話者の息継ぎ・文末ポーズを区切りとして
+    // 使う (SHAS の発想)。audio 時間軸で判定するため replay 速度に不変
+    case pauseAware(silenceMs: Int)
+
+    // associated value を持つため手動列挙。eval はこの配列を回して silenceMs sweep も
+    // 同一 run で A/B する
+    static var allCases: [SegmentationPolicy] {
+        [
+            .current, .clauseAware,
+            .pauseAware(silenceMs: 300), .pauseAware(silenceMs: 500), .pauseAware(silenceMs: 800),
+        ]
+    }
+
+    // 音響ポーズ判定に使う audio 時間軸の観測値。テキストだけでは判定できない
+    // pauseAware のための追加入力で、current / clauseAware は参照しない
+    struct Context {
+        // 最新の認識結果 (volatile 含む) が対応する audio 区間の終端秒
+        var lastResultAudioEnd: TimeInterval?
+        // 認識エンジンへ供給済みの audio の累積秒
+        var audioFedThrough: TimeInterval?
+
+        init(lastResultAudioEnd: TimeInterval? = nil, audioFedThrough: TimeInterval? = nil) {
+            self.lastResultAudioEnd = lastResultAudioEnd
+            self.audioFedThrough = audioFedThrough
+        }
+    }
 
     var description: String {
         switch self {
         case .current: return "current"
         case .clauseAware: return "clauseAware"
+        case .pauseAware(let silenceMs): return "pauseAware\(silenceMs)"
         }
     }
 
@@ -160,8 +188,9 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
     ]
 
     // 閾値超過後、区切りらしい位置なら確定要求する。無ければ閾値の 1.5 倍まで
-    // 保留し Speech 側の自然な final 発火を待つ (純関数・テスト対象)
-    func shouldForceFinalize(text: String, threshold: Int) -> Bool {
+    // 保留し Speech 側の自然な final 発火を待つ (純関数・テスト対象)。
+    // context は pauseAware の音響ポーズ判定にのみ使う (既存 policy は既定値で不変)
+    func shouldForceFinalize(text: String, threshold: Int, context: Context = Context()) -> Bool {
         let count = text.count
         guard count >= threshold else { return false }
         let hardLimit = Int(Double(threshold) * Self.graceMultiplier)
@@ -170,6 +199,14 @@ enum SegmentationPolicy: CaseIterable, CustomStringConvertible {
         case .current:
             return text.suffix(Self.punctuationTailWindow)
                 .contains { Self.sentenceBreakPunctuation.contains($0) }
+        case .pauseAware(let silenceMs):
+            // audio 時刻が揃わない間 (認識初期・時間属性なし) は保留し hardLimit に委ねる
+            guard let lastEnd = context.lastResultAudioEnd,
+                let fedThrough = context.audioFedThrough
+            else {
+                return false
+            }
+            return (fedThrough - lastEnd) * 1000 >= Double(silenceMs)
         case .clauseAware:
             // 閉じ括弧・閉じ引用符 (「…します。」) は句読点判定を隠すため先に剥がす
             var tail = Substring(text)
