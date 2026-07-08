@@ -155,8 +155,8 @@ struct CaptionStateTests {
         #expect(state.translationDisplayLines.map(\.text) == ["First.", "Second."])
     }
 
-    // 文確定の瞬間に追従訳を消さず、自分の確定訳の到着まで placeholder として残す
-    // (確定〜確定訳到着の間に下段が一瞬空になる regression の防止)。
+    // 文確定の瞬間に volatileTranslation の生値を消さず、自分の確定訳の到着まで placeholder
+    // として保持する (生状態の一時空を防ぐ。表示は mask k>0 では masked 空で行を出さない)。
     // 次の文の追従訳が先に届いた場合はそちらが優先して上書きする (追従スロットは 1 つ)。
     // 10 秒無更新なら pruneExpired が先に消す (確定訳到着までの無期限保証ではない)
     @Test
