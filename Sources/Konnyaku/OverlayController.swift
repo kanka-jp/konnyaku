@@ -21,7 +21,7 @@ final class OverlayController: NSObject, NSWindowDelegate {
     }
 
     // stableDisplayID が無い、または他モニターと重複するモニターは選択肢から除外する
-    // (未解決 ID は復元先不定、重複 ID は screenFrame の first(where:) 解決が順序依存になるため全除外)
+    // (未解決・重複 ID は screenFrame が nil を返し配置先を決められないため)
     static func availableDisplays() -> [DisplayOption] {
         let screens = NSScreen.screens.map { (screen: $0, stableID: $0.stableDisplayID) }
         let idCounts = screens.reduce(into: [String: Int]()) { counts, entry in
