@@ -247,6 +247,19 @@ struct OverlayControllerTests {
         #expect(frame == nil)
     }
 
+    // 複数モニターが同じ id を報告する場合、first(where:) による NSScreen.screens 順序依存の
+    // 解決を避けるため nil (呼び出し元のフォールバック) を返す契約
+    @Test
+    func screenFrameForDisplayIDReturnsNilWhenIDIsDuplicated() {
+        let first = NSRect(x: 0, y: 0, width: 1000, height: 800)
+        let second = NSRect(x: 1000, y: 0, width: 600, height: 400)
+        let frame = OverlayController.screenFrame(
+            forDisplayID: "dup-id",
+            in: [(id: "dup-id", frame: first), (id: "dup-id", frame: second)]
+        )
+        #expect(frame == nil)
+    }
+
     @Test
     func targetScreenFrameUsesMainScreenWhenNoSavedOrigin() {
         let main = NSRect(x: 0, y: 0, width: 1000, height: 800)

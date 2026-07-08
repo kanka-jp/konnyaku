@@ -35,14 +35,15 @@ final class OverlayController: NSObject, NSWindowDelegate {
         }
     }
 
-    // preferredDisplayID に一致するモニターの visibleFrame。未選択 (nil) または
-    // 該当モニターが見つからない (切断済み等) 場合は nil を返し、呼び出し元が
-    // mainScreenFrame へフォールバックする
+    // preferredDisplayID に一致するモニターの visibleFrame。未選択・未接続・id 重複
+    // (NSScreen.screens 順序依存で解決先不定) の場合は nil を返し mainScreenFrame へフォールバック
     nonisolated static func screenFrame(
         forDisplayID id: String?, in screens: [(id: String?, frame: NSRect)]
     ) -> NSRect? {
         guard let id else { return nil }
-        return screens.first(where: { $0.id == id })?.frame
+        let matches = screens.filter { $0.id == id }
+        guard matches.count == 1 else { return nil }
+        return matches.first?.frame
     }
 
     // setter は本 controller に閉じる (getter はテストが抑制契約を検証するために公開)
