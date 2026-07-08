@@ -264,7 +264,7 @@ struct OverlayControllerTests {
         let main = NSRect(x: 0, y: 0, width: 1000, height: 800)
         let secondary = NSRect(x: 1000, y: 0, width: 600, height: 400)
         let target = OverlayController.targetScreenFrame(
-            savedOrigin: nil, screenFrames: [main, secondary], mainScreenFrame: main
+            savedOrigin: nil, screenFrames: [main, secondary], fallbackScreenFrame: main
         )
         #expect(target == main)
     }
@@ -274,7 +274,7 @@ struct OverlayControllerTests {
         let main = NSRect(x: 0, y: 0, width: 1000, height: 800)
         let secondary = NSRect(x: 1000, y: 0, width: 600, height: 400)
         let target = OverlayController.targetScreenFrame(
-            savedOrigin: NSPoint(x: 1200, y: 100), screenFrames: [main, secondary], mainScreenFrame: main
+            savedOrigin: NSPoint(x: 1200, y: 100), screenFrames: [main, secondary], fallbackScreenFrame: main
         )
         #expect(target == secondary)
     }
@@ -284,7 +284,7 @@ struct OverlayControllerTests {
         let main = NSRect(x: 0, y: 0, width: 1000, height: 800)
         let secondary = NSRect(x: 1000, y: 0, width: 600, height: 400)
         let target = OverlayController.targetScreenFrame(
-            savedOrigin: NSPoint(x: 5000, y: 5000), screenFrames: [main, secondary], mainScreenFrame: main
+            savedOrigin: NSPoint(x: 5000, y: 5000), screenFrames: [main, secondary], fallbackScreenFrame: main
         )
         #expect(target == main)
     }

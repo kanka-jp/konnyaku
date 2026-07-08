@@ -63,9 +63,9 @@ final class OverlayController: NSObject, NSWindowDelegate {
 
     // 保存済み origin が属するスクリーンがあればその frame を使う (main 基準のままだと
     // より小さいセカンダリモニターへ復元する際に height がそのスクリーンに収まらない)
-    nonisolated static func targetScreenFrame(savedOrigin: NSPoint?, screenFrames: [NSRect], mainScreenFrame: NSRect) -> NSRect {
-        guard let savedOrigin else { return mainScreenFrame }
-        return screenFrames.first(where: { $0.contains(savedOrigin) }) ?? mainScreenFrame
+    nonisolated static func targetScreenFrame(savedOrigin: NSPoint?, screenFrames: [NSRect], fallbackScreenFrame: NSRect) -> NSRect {
+        guard let savedOrigin else { return fallbackScreenFrame }
+        return screenFrames.first(where: { $0.contains(savedOrigin) }) ?? fallbackScreenFrame
     }
 
     // origin の contains で決めた画面 (targetScreen) が候補 frame とまだ重なるなら維持し、
@@ -103,7 +103,7 @@ final class OverlayController: NSObject, NSWindowDelegate {
         // ユーザーが設定画面で選んだモニターを mainScreenFrame より優先する
         let fallbackScreenFrame = preferredScreenFrame ?? mainScreenFrame
         var targetScreen = targetScreenFrame(
-            savedOrigin: savedOrigin, screenFrames: screenFrames, mainScreenFrame: fallbackScreenFrame
+            savedOrigin: savedOrigin, screenFrames: screenFrames, fallbackScreenFrame: fallbackScreenFrame
         )
         var frame = defaultFrame(on: targetScreen)
 
