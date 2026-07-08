@@ -46,7 +46,7 @@ final class CaptionPipeline {
     private var pendingFinalTextsAwaitingCorrectionDrain: [(text: String, generation: Int)] = []
     private var correctionBacklog = 0
     private var segmentThreshold = CaptionPipeline.latinSegmentThreshold
-    private let segmentationPolicy: SegmentationPolicy = .current
+    private let segmentationPolicy: SegmentationPolicy = .clauseAware
     private var forcedFinalizeInFlight = false
     // pauseAware のポーズ判定入力 (audio 供給時刻と最新結果の audio 終端)。
     // .current 運用では参照されないが観測値として常に更新する。判定は認識結果の

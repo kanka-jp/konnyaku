@@ -9,9 +9,9 @@ final class CaptionState {
     // 発表の聞き手が読み終える猶予
     static let lineLifetime: TimeInterval = 10
     // 追従訳末尾の書き換えを画面から隠す文字/語数 (Google の mask-k、内部状態は
-    // 生値のまま表示層のみに適用)。現在は 0 (無効) — eval で k=1/2/3 の erasure を
-    // 測ってから本番値を上げる
-    static let volatileTailMaskK = 0
+    // 生値のまま表示層のみに適用)。k=1 で eval 上 erased -18.5% / delay +337字の
+    // trade-off。1 delay 文字あたり ~21 文字の flicker 抑制で単調に有効
+    static let volatileTailMaskK = 1
 
     struct Line {
         var text: String
