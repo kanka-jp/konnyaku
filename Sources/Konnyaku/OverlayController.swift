@@ -20,12 +20,14 @@ final class OverlayController: NSObject, NSWindowDelegate {
         let name: String
     }
 
-    // stableDisplayID を取得できないモニター (EDID 取得失敗等) は永続化しても
-    // 復元先を保証できないため選択肢から除外する (index ベースの fallback ID は
-    // 再接続・再起動でモニター順序が変わると別モニターへ誤って解決されうる)
+    // stableDisplayID が無い、または他モニターと重複するモニターは選択肢から除外する
+    // (未解決 ID は復元先を保証できず、重複 ID は SwiftUI ForEach の一意性契約を破る)
     static func availableDisplays() -> [DisplayOption] {
-        NSScreen.screens.compactMap { screen in
-            guard let stableID = screen.stableDisplayID else { return nil }
+        var seenIDs = Set<String>()
+        return NSScreen.screens.compactMap { screen in
+            guard let stableID = screen.stableDisplayID, seenIDs.insert(stableID).inserted else {
+                return nil
+            }
             return DisplayOption(id: stableID, name: screen.localizedName)
         }
     }
