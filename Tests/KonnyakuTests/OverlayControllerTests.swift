@@ -339,18 +339,20 @@ struct OverlayControllerTests {
         #expect(defaults.object(forKey: OverlayController.originYKey) != nil)
     }
 
-    // savedOrigin が無い場合 (直前の特定モニター選択でクリアされた等) は
-    // applyPreferredDisplayChange(id: nil) がメインディスプレイへのフォールバックを
-    // 即座に反映する契約 (パネルが無い場合は resetFrame が早期 return するため無害)
+    // savedOrigin が無い場合、applyPreferredDisplayChange(id: nil) は resetFrame を
+    // 経由してパネル非表示中でも保存済み frame をクリアする (resetFrameClearsSavedFrameEvenWithoutPanel と同じ defer 起因の挙動)
     @Test @MainActor
-    func applyPreferredDisplayChangeToAutomaticIsNoOpWithoutSavedOriginOrPanel() {
+    func applyPreferredDisplayChangeToAutomaticClearsSavedFrameWithoutSavedOriginOrPanel() {
         let defaults = UserDefaults.standard
         defaults.removeObject(forKey: OverlayController.originXKey)
         defaults.removeObject(forKey: OverlayController.originYKey)
+        defaults.set(600.0, forKey: OverlayController.widthKey)
+        defaults.set(300.0, forKey: OverlayController.heightKey)
 
         OverlayController().applyPreferredDisplayChange(id: nil, fontScale: 1.0)
 
         #expect(defaults.object(forKey: OverlayController.originXKey) == nil)
+        #expect(defaults.object(forKey: OverlayController.widthKey) == nil)
         #expect(defaults.object(forKey: OverlayController.heightKey) == nil)
     }
 
