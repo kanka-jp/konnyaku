@@ -36,6 +36,9 @@
 "settings.overlay_frame.finish" = "調整を終了";
 "settings.overlay_frame.reset" = "初期状態に戻す";
 "settings.overlay_frame.help" = "調整中は字幕をドラッグで移動、端をドラッグでサイズ変更し、「完了」で固定します";
+"settings.display_screen" = "表示モニター";
+"settings.display_screen.auto" = "自動";
+"settings.display_screen.help" = "選択したモニターへ画面全体オーバーレイの位置とサイズをリセットして移動します (「自動」はドラッグで動かした位置を復元し、無ければメインディスプレイに表示します)";
 "settings.font_size.decrease" = "文字を小さくする";
 "settings.font_size.increase" = "文字を大きくする";
 "settings.subtitle_placement" = "共有ビューの字幕配置";

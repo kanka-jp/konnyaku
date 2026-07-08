@@ -39,6 +39,14 @@ final class OverlaySettings {
         }
     }
 
+    // 画面全体オーバーレイを表示するモニター (NSScreen.stableDisplayID)。nil = 自動
+    // (ドラッグで動かした位置が属する画面、無ければメインディスプレイ)
+    var preferredDisplayID: String? {
+        didSet {
+            ConfigStore.set(preferredDisplayID ?? "", forKey: ConfigStore.preferredDisplayKey)
+        }
+    }
+
     // 視聴者に届く字幕は共有ビュー側に合成されるため、host 側のオーバーレイは二重表示になる
     var hideOverlayDuringShare: Bool {
         didSet {
@@ -56,6 +64,8 @@ final class OverlaySettings {
             .flatMap(SubtitlePlacement.init(rawValue:)) ?? .overlay
         subtitlePosition = config[ConfigStore.subtitlePositionKey]
             .flatMap(SubtitlePosition.init(rawValue:)) ?? .bottom
+        // 空文字列 (テンプレートの既定値) と未設定を同じ「自動」として扱う
+        preferredDisplayID = config[ConfigStore.preferredDisplayKey].flatMap { $0.isEmpty ? nil : $0 }
         // 未設定 (既存ユーザー含む) は false = 現行挙動 (両方表示) を維持する
         hideOverlayDuringShare = config[ConfigStore.hideOverlayDuringShareKey] == "true"
     }

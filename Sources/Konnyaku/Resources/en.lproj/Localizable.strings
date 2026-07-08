@@ -36,6 +36,9 @@
 "settings.overlay_frame.finish" = "Finish Adjusting";
 "settings.overlay_frame.reset" = "Reset to Default";
 "settings.overlay_frame.help" = "While adjusting, drag the subtitles to move them, drag the edges to resize, then click \"Done\" to lock";
+"settings.display_screen" = "Display Screen";
+"settings.display_screen.auto" = "Automatic";
+"settings.display_screen.help" = "Moves the full-screen overlay to the selected monitor, resetting its position and size (\"Automatic\" restores the position you last dragged it to, falling back to the main display)";
 "settings.font_size.decrease" = "Decrease text size";
 "settings.font_size.increase" = "Increase text size";
 "settings.subtitle_placement" = "Share View Subtitle Placement";

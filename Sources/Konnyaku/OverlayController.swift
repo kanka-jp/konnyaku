@@ -1,4 +1,5 @@
 import AppKit
+import CoreGraphics
 import SwiftUI
 
 @MainActor
@@ -11,6 +12,38 @@ final class OverlayController: NSObject, NSWindowDelegate {
     private static let margin: CGFloat = 24
     // 幅は字幕 2 行が読める最低限、高さは panelHeight の minimumHeight と揃える
     nonisolated static let minPanelSize = NSSize(width: 320, height: 200)
+
+    // 設定画面のモニター選択 Picker に出す 1 モニター分の情報。id は EDID 由来の
+    // 安定 UUID (NSScreen.stableDisplayID) で、抜き差し・再起動をまたいでも復元できる
+    struct DisplayOption: Identifiable, Equatable, Sendable {
+        let id: String
+        let name: String
+    }
+
+    // stableDisplayID が無い、または他モニターと重複するモニターは選択肢から除外する
+    // (未解決・重複 ID は screenFrame が nil を返し配置先を決められないため)
+    static func availableDisplays() -> [DisplayOption] {
+        let screens = NSScreen.screens.map { (screen: $0, stableID: $0.stableDisplayID) }
+        let idCounts = screens.reduce(into: [String: Int]()) { counts, entry in
+            guard let stableID = entry.stableID else { return }
+            counts[stableID, default: 0] += 1
+        }
+        return screens.compactMap { screen, stableID in
+            guard let stableID, idCounts[stableID] == 1 else { return nil }
+            return DisplayOption(id: stableID, name: screen.localizedName)
+        }
+    }
+
+    // preferredDisplayID に一致するモニターの visibleFrame。未選択・未接続・id 重複
+    // (NSScreen.screens 順序依存で解決先不定) の場合は nil を返し mainScreenFrame へフォールバック
+    nonisolated static func screenFrame(
+        forDisplayID id: String?, in screens: [(id: String?, frame: NSRect)]
+    ) -> NSRect? {
+        guard let id else { return nil }
+        let matches = screens.filter { $0.id == id }
+        guard matches.count == 1 else { return nil }
+        return matches.first?.frame
+    }
 
     // setter は本 controller に閉じる (getter はテストが抑制契約を検証するために公開)
     private(set) var panel: AdjustablePanel?
@@ -30,9 +63,9 @@ final class OverlayController: NSObject, NSWindowDelegate {
 
     // 保存済み origin が属するスクリーンがあればその frame を使う (main 基準のままだと
     // より小さいセカンダリモニターへ復元する際に height がそのスクリーンに収まらない)
-    nonisolated static func targetScreenFrame(savedOrigin: NSPoint?, screenFrames: [NSRect], mainScreenFrame: NSRect) -> NSRect {
-        guard let savedOrigin else { return mainScreenFrame }
-        return screenFrames.first(where: { $0.contains(savedOrigin) }) ?? mainScreenFrame
+    nonisolated static func targetScreenFrame(savedOrigin: NSPoint?, screenFrames: [NSRect], fallbackScreenFrame: NSRect) -> NSRect {
+        guard let savedOrigin else { return fallbackScreenFrame }
+        return screenFrames.first(where: { $0.contains(savedOrigin) }) ?? fallbackScreenFrame
     }
 
     // origin の contains で決めた画面 (targetScreen) が候補 frame とまだ重なるなら維持し、
@@ -43,7 +76,8 @@ final class OverlayController: NSObject, NSWindowDelegate {
         savedSize: NSSize?,
         screenFrames: [NSRect],
         mainScreenFrame: NSRect,
-        margin: CGFloat
+        margin: CGFloat,
+        preferredScreenFrame: NSRect? = nil
     ) -> NSRect {
         // ユーザーが調整したサイズは fontScale 由来の自動サイズより優先する。上限は復元先
         // スクリーン (別モニターへの復元で画面より大きく戻さない)、下限は minPanelSize
@@ -65,8 +99,11 @@ final class OverlayController: NSObject, NSWindowDelegate {
             )
         }
 
+        // savedOrigin がどの画面にも属さない (未調整・モニター構成変更) 場合の既定先は、
+        // ユーザーが設定画面で選んだモニターを mainScreenFrame より優先する
+        let fallbackScreenFrame = preferredScreenFrame ?? mainScreenFrame
         var targetScreen = targetScreenFrame(
-            savedOrigin: savedOrigin, screenFrames: screenFrames, mainScreenFrame: mainScreenFrame
+            savedOrigin: savedOrigin, screenFrames: screenFrames, fallbackScreenFrame: fallbackScreenFrame
         )
         var frame = defaultFrame(on: targetScreen)
 
@@ -94,6 +131,13 @@ final class OverlayController: NSObject, NSWindowDelegate {
         return frame
     }
 
+    // NSScreen.screens を (stableDisplayID, visibleFrame) のペアへ変換する共有ヘルパー。
+    // stableDisplayID が無いスクリーンも frame は savedOrigin マッチングに必要なため
+    // id: nil のまま保持する (availableDisplays() が選択肢に出さないため検索キーと一致しない)
+    private static func currentScreens() -> [(id: String?, frame: NSRect)] {
+        NSScreen.screens.map { (id: $0.stableDisplayID, frame: $0.visibleFrame) }
+    }
+
     func show(
         state: CaptionState,
         settings: OverlaySettings,
@@ -108,13 +152,15 @@ final class OverlayController: NSObject, NSWindowDelegate {
             return
         }
         guard let mainScreen = NSScreen.main else { return }
+        let screens = Self.currentScreens()
         let frame = Self.resolvedShowFrame(
             fontScale: settings.fontScale,
             savedOrigin: savedOrigin(),
             savedSize: savedSize(),
-            screenFrames: NSScreen.screens.map(\.visibleFrame),
+            screenFrames: screens.map(\.frame),
             mainScreenFrame: mainScreen.visibleFrame,
-            margin: Self.margin
+            margin: Self.margin,
+            preferredScreenFrame: Self.screenFrame(forDisplayID: settings.preferredDisplayID, in: screens)
         )
         let panel = AdjustablePanel(
             contentRect: frame,
@@ -164,8 +210,9 @@ final class OverlayController: NSObject, NSWindowDelegate {
     }
 
     // setFrame が発火させる windowDidMove の再保存を defer の削除で打ち消し、
-    // 未調整の初期状態 (保存 frame なし) に完全に戻す
-    func resetFrame(fontScale: Double) {
+    // 未調整の初期状態 (保存 frame なし) に完全に戻す。preferredDisplayID を渡すと
+    // そのモニターのデフォルト位置へ配置する (モニター選択の Picker 変更時の即時移動と共用)
+    func resetFrame(fontScale: Double, preferredDisplayID: String? = nil) {
         defer {
             let defaults = UserDefaults.standard
             defaults.removeObject(forKey: Self.originXKey)
@@ -174,15 +221,28 @@ final class OverlayController: NSObject, NSWindowDelegate {
             defaults.removeObject(forKey: Self.heightKey)
         }
         guard let panel, let mainScreen = NSScreen.main else { return }
+        let screens = Self.currentScreens()
         let frame = Self.resolvedShowFrame(
             fontScale: fontScale,
             savedOrigin: nil,
             savedSize: nil,
-            screenFrames: NSScreen.screens.map(\.visibleFrame),
+            screenFrames: screens.map(\.frame),
             mainScreenFrame: mainScreen.visibleFrame,
-            margin: Self.margin
+            margin: Self.margin,
+            preferredScreenFrame: Self.screenFrame(forDisplayID: preferredDisplayID, in: screens)
         )
         panel.setFrame(frame, display: true)
+    }
+
+    // 表示モニター Picker の変更を反映する。特定モニター選択は即座に resetFrame で
+    // そのモニターへ移動する。「自動」は savedOrigin が残っていれば何もしない
+    // (ドラッグ位置復元の契約を尊重) が、無ければメインディスプレイへ即時フォールバックする
+    func applyPreferredDisplayChange(id: String?, fontScale: Double) {
+        if let id {
+            resetFrame(fontScale: fontScale, preferredDisplayID: id)
+        } else if savedOrigin() == nil {
+            resetFrame(fontScale: fontScale, preferredDisplayID: nil)
+        }
     }
 
     // origin が画面外にはみ出さない範囲にクランプする (はみ出す分だけ最小限ずらす。
@@ -362,5 +422,21 @@ final class AdjustablePanel: NSPanel {
 
     override var canBecomeKey: Bool {
         allowsKeyWhileAdjusting
+    }
+}
+
+// NSScreen/AppKit API は main thread 専用。@MainActor を付けず放置すると
+// background task から誤って呼び出してもコンパイラが検出できない
+@MainActor
+extension NSScreen {
+    // CGDirectDisplayID はセッション内では安定だが、OS 再起動やモニター抜き差しの
+    // 順序次第で変わりうる。EDID から導出される UUID (CGDisplayCreateUUIDFromDisplayID)
+    // を設定ファイルへ永続化する識別子として使う
+    var stableDisplayID: String? {
+        guard let screenNumber = deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber
+        else { return nil }
+        guard let uuidRef = CGDisplayCreateUUIDFromDisplayID(screenNumber.uint32Value) else { return nil }
+        let uuid = uuidRef.takeRetainedValue()
+        return CFUUIDCreateString(nil, uuid) as String?
     }
 }

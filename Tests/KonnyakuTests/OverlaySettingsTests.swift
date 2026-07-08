@@ -76,6 +76,14 @@ struct OverlaySettingsTests {
     }
 
     @Test
+    func initParsesPreferredDisplayIDAndTreatsEmptyAsAutomatic() {
+        #expect(OverlaySettings(config: ["preferred-display": "uuid-1234"]).preferredDisplayID == "uuid-1234")
+        // 空文字列 (テンプレートの既定値) と未設定はどちらも「自動」= nil として扱う
+        #expect(OverlaySettings(config: ["preferred-display": ""]).preferredDisplayID == nil)
+        #expect(OverlaySettings(config: [:]).preferredDisplayID == nil)
+    }
+
+    @Test
     func initParsesHideOverlayDuringShareAndDefaultsToFalse() {
         #expect(OverlaySettings(config: ["hide-overlay-during-share": "true"]).hideOverlayDuringShare)
         #expect(!OverlaySettings(config: ["hide-overlay-during-share": "false"]).hideOverlayDuringShare)

@@ -98,6 +98,31 @@ struct SettingsView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 6) {
+                    // NSScreen.screens を読む API のため body 評価内で 1 回だけスナップショットする
+                    // (get / ForEach で別々に呼ぶと評価の間に構成が変わり得る)
+                    let displays = controller.availableDisplays
+                    Picker(t("settings.display_screen"), selection: Binding(
+                        get: {
+                            // 保存済み ID が未接続の場合は Picker タグ不一致を避け「自動」表示
+                            // (設定値自体は保持し、再接続時に resetFrame/show 側で自動復元される)
+                            guard let id = controller.settings.preferredDisplayID,
+                                displays.contains(where: { $0.id == id })
+                            else { return "" }
+                            return id
+                        },
+                        set: { controller.setPreferredDisplay($0.isEmpty ? nil : $0) }
+                    )) {
+                        Text(t("settings.display_screen.auto")).tag("")
+                        ForEach(displays) { display in
+                            Text(display.name).tag(display.id)
+                        }
+                    }
+                    Text(t("settings.display_screen.help"))
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
                     Picker(t("settings.subtitle_placement"), selection: Binding(
                         get: { controller.settings.subtitlePlacement },
                         set: { controller.settings.subtitlePlacement = $0 }

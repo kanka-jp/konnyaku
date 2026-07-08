@@ -175,12 +175,97 @@ struct OverlayControllerTests {
         #expect(frame.height == expectedHeight)
     }
 
+    // モニター選択 (preferredScreenFrame) は savedOrigin が無い場合、mainScreenFrame より
+    // 優先される契約。落ちる場合は Picker で選択したモニターが初回表示・リセット後の
+    // デフォルト位置に反映されない regression
+    @Test
+    func resolvedShowFramePrefersPreferredScreenOverMainWhenNoSavedOrigin() {
+        let main = NSRect(x: 0, y: 0, width: 1000, height: 800)
+        let preferred = NSRect(x: 1000, y: 0, width: 600, height: 400)
+        let frame = OverlayController.resolvedShowFrame(
+            fontScale: 1.0, savedOrigin: nil, savedSize: nil, screenFrames: [main, preferred],
+            mainScreenFrame: main, margin: 24, preferredScreenFrame: preferred
+        )
+        #expect(frame.minX >= preferred.minX)
+        #expect(frame.maxX <= preferred.maxX)
+    }
+
+    // savedOrigin がどの画面にも属さない (モニター構成変更等) 場合のフォールバックも
+    // preferredScreenFrame を優先する契約
+    @Test
+    func resolvedShowFramePrefersPreferredScreenWhenSavedOriginMatchesNoScreen() {
+        let main = NSRect(x: 0, y: 0, width: 1000, height: 800)
+        let preferred = NSRect(x: 1000, y: 0, width: 600, height: 400)
+        let frame = OverlayController.resolvedShowFrame(
+            fontScale: 1.0, savedOrigin: NSPoint(x: 5000, y: 5000), savedSize: nil,
+            screenFrames: [main, preferred], mainScreenFrame: main, margin: 24,
+            preferredScreenFrame: preferred
+        )
+        #expect(frame.minX >= preferred.minX)
+        #expect(frame.maxX <= preferred.maxX)
+    }
+
+    // savedOrigin が実在するスクリーンに属する場合は、ドラッグ位置 (savedOrigin) を
+    // preferredScreenFrame より優先する契約 (モニター選択後に手動調整した位置を尊重する)
+    @Test
+    func resolvedShowFrameKeepsSavedOriginScreenOverPreferredScreen() {
+        let main = NSRect(x: 0, y: 0, width: 1000, height: 800)
+        let dragged = NSRect(x: 1000, y: 0, width: 600, height: 400)
+        let frame = OverlayController.resolvedShowFrame(
+            fontScale: 1.0, savedOrigin: NSPoint(x: 1100, y: 100), savedSize: nil,
+            screenFrames: [main, dragged], mainScreenFrame: main, margin: 24,
+            preferredScreenFrame: main
+        )
+        #expect(frame.minX >= dragged.minX)
+        #expect(frame.maxX <= dragged.maxX)
+    }
+
+    @Test
+    func screenFrameForDisplayIDReturnsMatchingFrame() {
+        let main = NSRect(x: 0, y: 0, width: 1000, height: 800)
+        let secondary = NSRect(x: 1000, y: 0, width: 600, height: 400)
+        let frame = OverlayController.screenFrame(
+            forDisplayID: "secondary-id",
+            in: [(id: "main-id", frame: main), (id: "secondary-id", frame: secondary)]
+        )
+        #expect(frame == secondary)
+    }
+
+    @Test
+    func screenFrameForDisplayIDReturnsNilWhenNoMatch() {
+        let main = NSRect(x: 0, y: 0, width: 1000, height: 800)
+        let frame = OverlayController.screenFrame(
+            forDisplayID: "disconnected-id", in: [(id: "main-id", frame: main)]
+        )
+        #expect(frame == nil)
+    }
+
+    @Test
+    func screenFrameForDisplayIDReturnsNilWhenIDIsNil() {
+        let main = NSRect(x: 0, y: 0, width: 1000, height: 800)
+        let frame = OverlayController.screenFrame(forDisplayID: nil, in: [(id: "main-id", frame: main)])
+        #expect(frame == nil)
+    }
+
+    // 複数モニターが同じ id を報告する場合、first(where:) による NSScreen.screens 順序依存の
+    // 解決を避けるため nil (呼び出し元のフォールバック) を返す契約
+    @Test
+    func screenFrameForDisplayIDReturnsNilWhenIDIsDuplicated() {
+        let first = NSRect(x: 0, y: 0, width: 1000, height: 800)
+        let second = NSRect(x: 1000, y: 0, width: 600, height: 400)
+        let frame = OverlayController.screenFrame(
+            forDisplayID: "dup-id",
+            in: [(id: "dup-id", frame: first), (id: "dup-id", frame: second)]
+        )
+        #expect(frame == nil)
+    }
+
     @Test
     func targetScreenFrameUsesMainScreenWhenNoSavedOrigin() {
         let main = NSRect(x: 0, y: 0, width: 1000, height: 800)
         let secondary = NSRect(x: 1000, y: 0, width: 600, height: 400)
         let target = OverlayController.targetScreenFrame(
-            savedOrigin: nil, screenFrames: [main, secondary], mainScreenFrame: main
+            savedOrigin: nil, screenFrames: [main, secondary], fallbackScreenFrame: main
         )
         #expect(target == main)
     }
@@ -190,7 +275,7 @@ struct OverlayControllerTests {
         let main = NSRect(x: 0, y: 0, width: 1000, height: 800)
         let secondary = NSRect(x: 1000, y: 0, width: 600, height: 400)
         let target = OverlayController.targetScreenFrame(
-            savedOrigin: NSPoint(x: 1200, y: 100), screenFrames: [main, secondary], mainScreenFrame: main
+            savedOrigin: NSPoint(x: 1200, y: 100), screenFrames: [main, secondary], fallbackScreenFrame: main
         )
         #expect(target == secondary)
     }
@@ -200,7 +285,7 @@ struct OverlayControllerTests {
         let main = NSRect(x: 0, y: 0, width: 1000, height: 800)
         let secondary = NSRect(x: 1000, y: 0, width: 600, height: 400)
         let target = OverlayController.targetScreenFrame(
-            savedOrigin: NSPoint(x: 5000, y: 5000), screenFrames: [main, secondary], mainScreenFrame: main
+            savedOrigin: NSPoint(x: 5000, y: 5000), screenFrames: [main, secondary], fallbackScreenFrame: main
         )
         #expect(target == main)
     }
@@ -244,6 +329,46 @@ struct OverlayControllerTests {
 
         #expect(defaults.object(forKey: OverlayController.originXKey) == nil)
         #expect(defaults.object(forKey: OverlayController.originYKey) == nil)
+        #expect(defaults.object(forKey: OverlayController.widthKey) == nil)
+        #expect(defaults.object(forKey: OverlayController.heightKey) == nil)
+    }
+
+    // applyPreferredDisplayChange(id: nil) (「自動」選択) は savedOrigin が残っていれば
+    // resetFrame を呼ばずドラッグ位置を保持する契約。落ちる場合は特定モニター選択 → 自動
+    // 復帰でドラッグ位置が失われる regression
+    @Test @MainActor
+    func applyPreferredDisplayChangeToAutomaticPreservesSavedOriginWhenPresent() {
+        let defaults = UserDefaults.standard
+        defaults.set(123.0, forKey: OverlayController.originXKey)
+        defaults.set(45.0, forKey: OverlayController.originYKey)
+        defer {
+            defaults.removeObject(forKey: OverlayController.originXKey)
+            defaults.removeObject(forKey: OverlayController.originYKey)
+        }
+
+        OverlayController().applyPreferredDisplayChange(id: nil, fontScale: 1.0)
+
+        #expect(defaults.object(forKey: OverlayController.originXKey) != nil)
+        #expect(defaults.object(forKey: OverlayController.originYKey) != nil)
+    }
+
+    // savedOrigin が無い場合、applyPreferredDisplayChange(id: nil) は resetFrame を
+    // 経由してパネル非表示中でも保存済み frame をクリアする (resetFrameClearsSavedFrameEvenWithoutPanel と同じ defer 起因の挙動)
+    @Test @MainActor
+    func applyPreferredDisplayChangeToAutomaticClearsSavedFrameWithoutSavedOriginOrPanel() {
+        let defaults = UserDefaults.standard
+        defaults.removeObject(forKey: OverlayController.originXKey)
+        defaults.removeObject(forKey: OverlayController.originYKey)
+        defaults.set(600.0, forKey: OverlayController.widthKey)
+        defaults.set(300.0, forKey: OverlayController.heightKey)
+        defer {
+            defaults.removeObject(forKey: OverlayController.widthKey)
+            defaults.removeObject(forKey: OverlayController.heightKey)
+        }
+
+        OverlayController().applyPreferredDisplayChange(id: nil, fontScale: 1.0)
+
+        #expect(defaults.object(forKey: OverlayController.originXKey) == nil)
         #expect(defaults.object(forKey: OverlayController.widthKey) == nil)
         #expect(defaults.object(forKey: OverlayController.heightKey) == nil)
     }
@@ -343,6 +468,28 @@ struct OverlayControllerTests {
             fallback: mainVisible
         )
         #expect(target == secondaryVisible)
+    }
+
+    // savedOrigin が無い状態での applyPreferredDisplayChange(id: nil) はパネルがある場合、
+    // resetFrame を経由してメインディスプレイへのフォールバックを即座に反映する契約
+    @Test @MainActor
+    func applyPreferredDisplayChangeToAutomaticMovesExistingPanelToMainWhenNoSavedOrigin() throws {
+        // CI runner に WindowServer が無い場合 show() は panel を作れないため対象外
+        guard let mainScreen = NSScreen.main else { return }
+        let defaults = UserDefaults.standard
+        defaults.removeObject(forKey: OverlayController.originXKey)
+        defaults.removeObject(forKey: OverlayController.originYKey)
+        let controller = OverlayController()
+        controller.show(
+            state: CaptionState(), settings: OverlaySettings(config: [:]),
+            languages: LanguageSettings(config: [:]), onFinishMoving: {}
+        )
+        defer { controller.hide() }
+        let panel = try #require(controller.panel)
+
+        controller.applyPreferredDisplayChange(id: nil, fontScale: 1.0)
+
+        #expect(mainScreen.visibleFrame.intersects(panel.frame))
     }
 
     // 共有ビュー表示中の抑制契約: パネルは破棄せず表示だけを消し、解除で同じパネルが

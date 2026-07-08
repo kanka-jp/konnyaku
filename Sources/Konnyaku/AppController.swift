@@ -215,7 +215,16 @@ final class AppController {
     }
 
     func resetOverlayFrame() {
-        overlay.resetFrame(fontScale: settings.fontScale)
+        overlay.resetFrame(fontScale: settings.fontScale, preferredDisplayID: settings.preferredDisplayID)
+    }
+
+    var availableDisplays: [OverlayController.DisplayOption] {
+        OverlayController.availableDisplays()
+    }
+
+    func setPreferredDisplay(_ id: String?) {
+        settings.preferredDisplayID = id
+        overlay.applyPreferredDisplayChange(id: id, fontScale: settings.fontScale)
     }
 
     var isShareViewOpen: Bool {

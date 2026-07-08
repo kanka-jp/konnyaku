@@ -118,12 +118,12 @@ SwiftPM executable + `make app` で `.app` bundle を組み立てる (Xcode プ�
 9. UI の i18n (en / ja の localized resources)
 10. 認識精度の改善: `.fastResults` は維持 (外すと volatile 字幕の初出が数秒遅れライブ字幕が成立しない。確定精度の差 +0.6pp は AI 補正層が吸収)、カスタム語彙 (`AnalysisContext.contextualStrings` + AI 補正プロンプトへ注入、`~/.config/konnyaku/vocabulary.txt` に 1 行 1 語、上限 100 語)
 11. AI 補正 (opt-in トグル): 確定文はまず原文を即表示し、オンデバイス LLM (FoundationModels / Apple Intelligence) の校正完了後にまだ表示中なら差し替える (翻訳へは校正後テキストを流す)。`SystemLanguageModel.default.isAvailable` でゲートし、cancel・失敗時は原文 fallback。順序保証のため専用 worker で逐次処理。プロンプト・語尾復元が日本語専用のため日本語入力時のみ有効
+12. 複数ディスプレイの出力先選択 (設定ウィンドウのモニター Picker。`NSScreen.stableDisplayID` = `CGDisplayCreateUUIDFromDisplayID` 由来の UUID で `~/.config/konnyaku/config` へ永続化し、抜き差し・再起動をまたいでも同じモニターを復元する。選択直後は位置・サイズをリセットしてそのモニターの既定位置へ移動、未選択 = 自動はドラッグ位置の復元 → メインディスプレイの従来挙動を維持)
 
 含まない (実需要が出てから):
 
 - 一時停止ホットキー
 - フォント種・色の設定 UI
-- 複数ディスプレイの出力先選択
 - 字幕履歴の保存・エクスポート
 - lowLatency 翻訳 strategy (デフォルトモデルと別アセットのため、DL 導線を含めて実需要が出てから。実機で lowLatency status = supported 止まりを確認済み)
 
