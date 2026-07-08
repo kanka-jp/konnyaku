@@ -247,6 +247,18 @@ struct OverlayControllerTests {
         #expect(frame == nil)
     }
 
+    // availableDisplays()/currentScreens() が共有する契約。落ちる場合は fallback ロジックが
+    // 食い違い、Picker で選択したモニターが二度と解決できなくなる regression
+    @Test
+    func identifiedIDPrefersStableDisplayIDOverIndexFallback() {
+        #expect(OverlayController.identifiedID(stableDisplayID: "uuid-123", index: 5) == "uuid-123")
+    }
+
+    @Test
+    func identifiedIDFallsBackToIndexWhenStableDisplayIDMissing() {
+        #expect(OverlayController.identifiedID(stableDisplayID: nil, index: 2) == "screen-2")
+    }
+
     @Test
     func targetScreenFrameUsesMainScreenWhenNoSavedOrigin() {
         let main = NSRect(x: 0, y: 0, width: 1000, height: 800)

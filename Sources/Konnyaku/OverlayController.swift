@@ -20,9 +20,18 @@ final class OverlayController: NSObject, NSWindowDelegate {
         let name: String
     }
 
+    // screen 識別子の唯一の生成ロジック (availableDisplays()/currentScreens() が別々に
+    // fallback を計算すると id が食い違い、選択したモニターへ二度と復元できなくなるため)
+    nonisolated static func identifiedID(stableDisplayID: String?, index: Int) -> String {
+        stableDisplayID ?? "screen-\(index)"
+    }
+
     static func availableDisplays() -> [DisplayOption] {
         NSScreen.screens.enumerated().map { index, screen in
-            DisplayOption(id: screen.stableDisplayID ?? "screen-\(index)", name: screen.localizedName)
+            DisplayOption(
+                id: identifiedID(stableDisplayID: screen.stableDisplayID, index: index),
+                name: screen.localizedName
+            )
         }
     }
 
@@ -30,7 +39,7 @@ final class OverlayController: NSObject, NSWindowDelegate {
     // 該当モニターが見つからない (切断済み等) 場合は nil を返し、呼び出し元が
     // mainScreenFrame へフォールバックする
     nonisolated static func screenFrame(
-        forDisplayID id: String?, in screens: [(id: String?, frame: NSRect)]
+        forDisplayID id: String?, in screens: [(id: String, frame: NSRect)]
     ) -> NSRect? {
         guard let id else { return nil }
         return screens.first(where: { $0.id == id })?.frame
@@ -122,10 +131,12 @@ final class OverlayController: NSObject, NSWindowDelegate {
         return frame
     }
 
-    // NSScreen.screens を (安定 UUID, visibleFrame) のペアへ変換する。show()/resetFrame()
+    // NSScreen.screens を (identifiedID, visibleFrame) のペアへ変換する。show()/resetFrame()
     // の両方が同じペアを resolvedShowFrame/screenFrame(forDisplayID:in:) に渡すための共有ヘルパー
-    private static func currentScreens() -> [(id: String?, frame: NSRect)] {
-        NSScreen.screens.map { (id: $0.stableDisplayID, frame: $0.visibleFrame) }
+    private static func currentScreens() -> [(id: String, frame: NSRect)] {
+        NSScreen.screens.enumerated().map { index, screen in
+            (id: identifiedID(stableDisplayID: screen.stableDisplayID, index: index), frame: screen.visibleFrame)
+        }
     }
 
     func show(

@@ -222,10 +222,12 @@ final class AppController {
         OverlayController.availableDisplays()
     }
 
-    // Picker での選択直後にそのモニターのデフォルト位置へ移動する (savedOrigin/savedSize
-    // はクリアされるため、ユーザーは新しいモニターで改めてドラッグ調整すればよい)
+    // 特定モニター選択時のみ resetFrame でそのモニターのデフォルト位置へ移動する。「自動」
+    // (id == nil) では呼ばない — ヘルプテキストが約束する「自動はドラッグ位置を復元する」を
+    // 選択の往復で壊さないため
     func setPreferredDisplay(_ id: String?) {
         settings.preferredDisplayID = id
+        guard let id else { return }
         overlay.resetFrame(fontScale: settings.fontScale, preferredDisplayID: id)
     }
 
