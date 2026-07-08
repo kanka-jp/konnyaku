@@ -148,6 +148,9 @@ struct CaptionStateTests {
         state.setVolatileTranslation("typing...", generation: generation)
         #expect(state.translatedLines.map(\.text) == ["First."])
         #expect(state.volatileTranslation == "typing...")
+        // volatileTailMaskK = 1 で "typing..." (1 token) は mask 後空になり volatile 行を出さない
+        // (`masked.isEmpty` guard の regression 防止。guard 消失なら "typing..." が表示される)
+        #expect(state.translationDisplayLines.map(\.text) == ["First."])
 
         // 文の確定 (世代が進む) 後に届いた同世代の確定訳が追従訳を置き換える
         state.appendFinalSource("確定文")
