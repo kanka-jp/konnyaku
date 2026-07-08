@@ -480,9 +480,18 @@ struct SegmentationEvaluationTests {
         let chrF: Double?
         let sourceErasedChars: Int
         let translationErasedChars: Int?
+        // key は k (0/1/2/3)。maskedTranslationErasedByK[0] は translationErasedChars と一致。
+        // maskedTranslationDelayCharsByK は最後の volatile 訳が mask で隠していた
+        // 末尾長 (final 到着で復元される分) の総和
+        let maskedTranslationErasedByK: [Int: Int]?
+        let maskedTranslationDelayCharsByK: [Int: Int]?
         let finalTexts: [String]
         let translatedTexts: [String]?
     }
+
+    // mask-k sweep で回す k の候補。0 は baseline (無適用)、production の default は
+    // eval 結果を見て CaptionState.volatileTailMaskK に反映する
+    static let maskCandidates = [0, 1, 2, 3]
 
     private static func evaluate(
         monologue: Monologue,
@@ -525,6 +534,8 @@ struct SegmentationEvaluationTests {
         var chrF: Double?
         var translatedTexts: [String]?
         var translationErased: Int?
+        var maskedErasedByK: [Int: Int]?
+        var maskedDelayByK: [Int: Int]?
         if let session {
             do {
                 var translations: [String] = []
@@ -534,8 +545,12 @@ struct SegmentationEvaluationTests {
 
                 // 追従訳の flicker: volatile 列を drop なしで逐次翻訳した表示列の erasure。
                 // production が翻訳へ流す最小長未満の volatile を除き (run 末尾の final は
-                // 長さ不問で翻訳されるため対象外)、連続重複は表示が変わらないため除外する
+                // 長さ不問で翻訳されるため対象外)、連続重複は表示が変わらないため除外する。
+                // 同じ dedup 済み翻訳列で mask-k sweep も同時に計算する (翻訳を k 回
+                // 呼ばず 1 回で済ませる)
                 var erased = 0
+                var maskedErased = Dictionary(uniqueKeysWithValues: Self.maskCandidates.map { ($0, 0) })
+                var maskedDelay = Dictionary(uniqueKeysWithValues: Self.maskCandidates.map { ($0, 0) })
                 for run in replay.volatileRuns {
                     var deduped: [String] = []
                     for (index, text) in run.enumerated()
@@ -555,12 +570,43 @@ struct SegmentationEvaluationTests {
                         translatedRun.append("")
                     }
                     erased += EvalMetrics.erasedCharacters(updates: translatedRun)
+
+                    // production は volatile のみ mask し final は unmask 表示するため、
+                    // 末尾要素 (final) を mask せず erasure に流し、表示遅延は最後の
+                    // volatile の mask 隠し長 (final 到着で復元される分) で数える。
+                    // delay は production で mask volatile 表示が発生した run にのみ計上する
+                    // (破棄セグメント / short-vol only は production 側でも表示未発生)
+                    let lastIndex = translatedRun.indices.last
+                    // dedup で final と volatile が collapse された (translatedRun が 1 要素)
+                    // ケースは、その要素が両方の役割を担う (production は mask 表示 → final
+                    // unmask 表示の遷移を経るため delay 対象)
+                    let lastVolatile =
+                        translatedRun.count == 1
+                        ? (translatedRun.last ?? "")
+                        : (translatedRun.dropLast().last ?? "")
+                    let volatileWillBeRestored = run.last != ""
+                    let hadTranslatableVolatile = run.dropLast().contains {
+                        $0.count >= CaptionPipeline.minVolatileTranslationLength
+                    }
+                    for k in Self.maskCandidates {
+                        let maskedRun = translatedRun.enumerated().map { index, text -> String in
+                            if let lastIndex, index == lastIndex { return text }
+                            return DisplayFormatting.maskVolatileTail(text: text, k: k)
+                        }
+                        maskedErased[k, default: 0] += EvalMetrics.erasedCharacters(updates: maskedRun)
+                        if volatileWillBeRestored && hadTranslatableVolatile {
+                            maskedDelay[k, default: 0] += DisplayFormatting.maskedTailLength(
+                                text: lastVolatile, k: k)
+                        }
+                    }
                 }
                 translatedTexts = translations
                 chrF = EvalMetrics.chrF(
                     hypothesis: translations.joined(separator: " "),
                     reference: monologue.referenceJoined)
                 translationErased = erased
+                maskedErasedByK = maskedErased
+                maskedDelayByK = maskedDelay
             } catch {
                 // 長時間 run の途中で翻訳が一時失敗しても当該 record の翻訳系指標だけ欠測に
                 // degrade し、収集済み records (printReport / writeJSON) を失わない
@@ -568,6 +614,8 @@ struct SegmentationEvaluationTests {
                 chrF = nil
                 translatedTexts = nil
                 translationErased = nil
+                maskedErasedByK = nil
+                maskedDelayByK = nil
             }
         }
 
@@ -595,6 +643,8 @@ struct SegmentationEvaluationTests {
             chrF: chrF,
             sourceErasedChars: sourceErased,
             translationErasedChars: translationErased,
+            maskedTranslationErasedByK: maskedErasedByK,
+            maskedTranslationDelayCharsByK: maskedDelayByK,
             finalTexts: replay.finals.map(\.text),
             translatedTexts: translatedTexts
         )
@@ -642,6 +692,28 @@ struct SegmentationEvaluationTests {
             print(
                 "\(policy): boundary F1=\(format(f1, 3)) chrF=\(format(chrFMean, 1)) "
                     + "forced/seg=\(forced)/\(segments)")
+        }
+        // mask-k sweep: policy を跨いだ全 record の合計。訳の flicker 抑制 (erased 減)
+        // と表示遅延 (delay 増) の trade-off を可視化する
+        print("----- mask-k sweep (全 record 合計、erased/delay chars) -----")
+        for k in Self.maskCandidates {
+            // 翻訳系メトリクスが nil の record を 0 として集計すると欠測が
+            // "計算できた 0" に見えるため、有効な record のみ合算する
+            let metrics = records.compactMap { record -> (erased: Int, delay: Int)? in
+                guard let erased = record.maskedTranslationErasedByK?[k],
+                    let delay = record.maskedTranslationDelayCharsByK?[k]
+                else { return nil }
+                return (erased, delay)
+            }
+            guard !metrics.isEmpty else {
+                print("k=\(k): erased=- delay=- records=0/\(records.count)")
+                continue
+            }
+            let erased = metrics.reduce(0) { $0 + $1.erased }
+            let delay = metrics.reduce(0) { $0 + $1.delay }
+            print(
+                "k=\(k): erased=\(erased) delay=\(delay) "
+                    + "records=\(metrics.count)/\(records.count)")
         }
         print("===== KONNYAKU_EVAL segmentation 終了 =====")
     }
