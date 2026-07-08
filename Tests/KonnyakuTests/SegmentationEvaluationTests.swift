@@ -573,17 +573,22 @@ struct SegmentationEvaluationTests {
 
                     // production は volatile のみ mask し final は unmask 表示するため、
                     // 末尾要素 (final) を mask せず erasure に流し、表示遅延は最後の
-                    // volatile の mask 隠し長 (final 到着で復元される分) で数える
+                    // volatile の mask 隠し長 (final 到着で復元される分) で数える。
+                    // 破棄セグメント (run.last == "") は production の discardVolatileSegment
+                    // で mask 隠し末尾が復元されず消えるだけなので delay 計上対象外
                     let lastIndex = translatedRun.indices.last
                     let lastVolatile = translatedRun.dropLast().last ?? ""
+                    let volatileWillBeRestored = run.last != ""
                     for k in Self.maskCandidates {
                         let maskedRun = translatedRun.enumerated().map { index, text -> String in
                             if let lastIndex, index == lastIndex { return text }
                             return DisplayFormatting.maskVolatileTail(text: text, k: k)
                         }
                         maskedErased[k, default: 0] += EvalMetrics.erasedCharacters(updates: maskedRun)
-                        maskedDelay[k, default: 0] += DisplayFormatting.maskedTailLength(
-                            text: lastVolatile, k: k)
+                        if volatileWillBeRestored {
+                            maskedDelay[k, default: 0] += DisplayFormatting.maskedTailLength(
+                                text: lastVolatile, k: k)
+                        }
                     }
                 }
                 translatedTexts = translations
