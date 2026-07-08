@@ -415,6 +415,9 @@ final class AdjustablePanel: NSPanel {
     }
 }
 
+// NSScreen/AppKit API は main thread 専用。@MainActor を付けず放置すると
+// background task から誤って呼び出してもコンパイラが検出できない
+@MainActor
 extension NSScreen {
     // CGDirectDisplayID はセッション内では安定だが、OS 再起動やモニター抜き差しの
     // 順序次第で変わりうる。EDID から導出される UUID (CGDisplayCreateUUIDFromDisplayID)
