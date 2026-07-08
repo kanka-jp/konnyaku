@@ -247,32 +247,6 @@ struct OverlayControllerTests {
         #expect(frame == nil)
     }
 
-    // availableDisplays()/currentScreens() が共有する契約。落ちる場合は fallback ロジックが
-    // 食い違い、Picker で選択したモニターが二度と解決できなくなる regression
-    @Test
-    func identifiedIDPrefersStableDisplayIDOverIndexFallback() {
-        #expect(OverlayController.identifiedID(stableDisplayID: "uuid-123", index: 5) == "uuid-123")
-    }
-
-    @Test
-    func identifiedIDFallsBackToIndexWhenStableDisplayIDMissing() {
-        #expect(OverlayController.identifiedID(stableDisplayID: nil, index: 2) == "screen-2")
-    }
-
-    // identifiedID/screenFrame は個別にテスト済みだが、currentScreens() と同じ手順で
-    // 組み立てた ID が実際に screenFrame で解決できることまでは検証していなかった
-    @Test
-    func identifiedIDRoundTripsThroughScreenFrameLookup() {
-        let main = NSRect(x: 0, y: 0, width: 1000, height: 800)
-        let secondary = NSRect(x: 1000, y: 0, width: 600, height: 400)
-        let screens = [
-            (id: OverlayController.identifiedID(stableDisplayID: nil, index: 0), frame: main),
-            (id: OverlayController.identifiedID(stableDisplayID: "uuid-123", index: 1), frame: secondary),
-        ]
-        let frame = OverlayController.screenFrame(forDisplayID: "uuid-123", in: screens)
-        #expect(frame == secondary)
-    }
-
     @Test
     func targetScreenFrameUsesMainScreenWhenNoSavedOrigin() {
         let main = NSRect(x: 0, y: 0, width: 1000, height: 800)
@@ -343,6 +317,40 @@ struct OverlayControllerTests {
         #expect(defaults.object(forKey: OverlayController.originXKey) == nil)
         #expect(defaults.object(forKey: OverlayController.originYKey) == nil)
         #expect(defaults.object(forKey: OverlayController.widthKey) == nil)
+        #expect(defaults.object(forKey: OverlayController.heightKey) == nil)
+    }
+
+    // applyPreferredDisplayChange(id: nil) (「自動」選択) は savedOrigin が残っていれば
+    // resetFrame を呼ばずドラッグ位置を保持する契約。落ちる場合は特定モニター選択 → 自動
+    // 復帰でドラッグ位置が失われる regression
+    @Test @MainActor
+    func applyPreferredDisplayChangeToAutomaticPreservesSavedOriginWhenPresent() {
+        let defaults = UserDefaults.standard
+        defaults.set(123.0, forKey: OverlayController.originXKey)
+        defaults.set(45.0, forKey: OverlayController.originYKey)
+        defer {
+            defaults.removeObject(forKey: OverlayController.originXKey)
+            defaults.removeObject(forKey: OverlayController.originYKey)
+        }
+
+        OverlayController().applyPreferredDisplayChange(id: nil, fontScale: 1.0)
+
+        #expect(defaults.object(forKey: OverlayController.originXKey) != nil)
+        #expect(defaults.object(forKey: OverlayController.originYKey) != nil)
+    }
+
+    // savedOrigin が無い場合 (直前の特定モニター選択でクリアされた等) は
+    // applyPreferredDisplayChange(id: nil) がメインディスプレイへのフォールバックを
+    // 即座に反映する契約 (パネルが無い場合は resetFrame が早期 return するため無害)
+    @Test @MainActor
+    func applyPreferredDisplayChangeToAutomaticIsNoOpWithoutSavedOriginOrPanel() {
+        let defaults = UserDefaults.standard
+        defaults.removeObject(forKey: OverlayController.originXKey)
+        defaults.removeObject(forKey: OverlayController.originYKey)
+
+        OverlayController().applyPreferredDisplayChange(id: nil, fontScale: 1.0)
+
+        #expect(defaults.object(forKey: OverlayController.originXKey) == nil)
         #expect(defaults.object(forKey: OverlayController.heightKey) == nil)
     }
 
@@ -441,6 +449,27 @@ struct OverlayControllerTests {
             fallback: mainVisible
         )
         #expect(target == secondaryVisible)
+    }
+
+    // savedOrigin が無い状態での applyPreferredDisplayChange(id: nil) はパネルがある場合、
+    // resetFrame を経由してメインディスプレイへのフォールバックを即座に反映する契約
+    @Test @MainActor
+    func applyPreferredDisplayChangeToAutomaticMovesExistingPanelToMainWhenNoSavedOrigin() throws {
+        guard let mainScreen = NSScreen.main else { return }
+        let defaults = UserDefaults.standard
+        defaults.removeObject(forKey: OverlayController.originXKey)
+        defaults.removeObject(forKey: OverlayController.originYKey)
+        let controller = OverlayController()
+        controller.show(
+            state: CaptionState(), settings: OverlaySettings(config: [:]),
+            languages: LanguageSettings(config: [:]), onFinishMoving: {}
+        )
+        defer { controller.hide() }
+        let panel = try #require(controller.panel)
+
+        controller.applyPreferredDisplayChange(id: nil, fontScale: 1.0)
+
+        #expect(mainScreen.visibleFrame.intersects(panel.frame))
     }
 
     // 共有ビュー表示中の抑制契約: パネルは破棄せず表示だけを消し、解除で同じパネルが

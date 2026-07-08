@@ -20,18 +20,13 @@ final class OverlayController: NSObject, NSWindowDelegate {
         let name: String
     }
 
-    // screen 識別子の唯一の生成ロジック (availableDisplays()/currentScreens() が別々に
-    // fallback を計算すると id が食い違い、選択したモニターへ二度と復元できなくなるため)
-    nonisolated static func identifiedID(stableDisplayID: String?, index: Int) -> String {
-        stableDisplayID ?? "screen-\(index)"
-    }
-
+    // stableDisplayID を取得できないモニター (EDID 取得失敗等) は永続化しても
+    // 復元先を保証できないため選択肢から除外する (index ベースの fallback ID は
+    // 再接続・再起動でモニター順序が変わると別モニターへ誤って解決されうる)
     static func availableDisplays() -> [DisplayOption] {
-        NSScreen.screens.enumerated().map { index, screen in
-            DisplayOption(
-                id: identifiedID(stableDisplayID: screen.stableDisplayID, index: index),
-                name: screen.localizedName
-            )
+        NSScreen.screens.compactMap { screen in
+            guard let stableID = screen.stableDisplayID else { return nil }
+            return DisplayOption(id: stableID, name: screen.localizedName)
         }
     }
 
@@ -39,7 +34,7 @@ final class OverlayController: NSObject, NSWindowDelegate {
     // 該当モニターが見つからない (切断済み等) 場合は nil を返し、呼び出し元が
     // mainScreenFrame へフォールバックする
     nonisolated static func screenFrame(
-        forDisplayID id: String?, in screens: [(id: String, frame: NSRect)]
+        forDisplayID id: String?, in screens: [(id: String?, frame: NSRect)]
     ) -> NSRect? {
         guard let id else { return nil }
         return screens.first(where: { $0.id == id })?.frame
@@ -131,12 +126,11 @@ final class OverlayController: NSObject, NSWindowDelegate {
         return frame
     }
 
-    // NSScreen.screens を (identifiedID, visibleFrame) のペアへ変換する。show()/resetFrame()
-    // の両方が同じペアを resolvedShowFrame/screenFrame(forDisplayID:in:) に渡すための共有ヘルパー
-    private static func currentScreens() -> [(id: String, frame: NSRect)] {
-        NSScreen.screens.enumerated().map { index, screen in
-            (id: identifiedID(stableDisplayID: screen.stableDisplayID, index: index), frame: screen.visibleFrame)
-        }
+    // NSScreen.screens を (stableDisplayID, visibleFrame) のペアへ変換する共有ヘルパー。
+    // stableDisplayID が無いスクリーンも frame は savedOrigin マッチングに必要なため
+    // id: nil のまま保持する (availableDisplays() が選択肢に出さないため検索キーと一致しない)
+    private static func currentScreens() -> [(id: String?, frame: NSRect)] {
+        NSScreen.screens.map { (id: $0.stableDisplayID, frame: $0.visibleFrame) }
     }
 
     func show(
@@ -233,6 +227,17 @@ final class OverlayController: NSObject, NSWindowDelegate {
             preferredScreenFrame: Self.screenFrame(forDisplayID: preferredDisplayID, in: screens)
         )
         panel.setFrame(frame, display: true)
+    }
+
+    // 表示モニター Picker の変更を反映する。特定モニター選択は即座に resetFrame で
+    // そのモニターへ移動する。「自動」は savedOrigin が残っていれば何もしない
+    // (ドラッグ位置復元の契約を尊重) が、無ければメインディスプレイへ即時フォールバックする
+    func applyPreferredDisplayChange(id: String?, fontScale: Double) {
+        if let id {
+            resetFrame(fontScale: fontScale, preferredDisplayID: id)
+        } else if savedOrigin() == nil {
+            resetFrame(fontScale: fontScale, preferredDisplayID: nil)
+        }
     }
 
     // origin が画面外にはみ出さない範囲にクランプする (はみ出す分だけ最小限ずらす。
