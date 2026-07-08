@@ -259,6 +259,20 @@ struct OverlayControllerTests {
         #expect(OverlayController.identifiedID(stableDisplayID: nil, index: 2) == "screen-2")
     }
 
+    // identifiedID/screenFrame は個別にテスト済みだが、currentScreens() と同じ手順で
+    // 組み立てた ID が実際に screenFrame で解決できることまでは検証していなかった
+    @Test
+    func identifiedIDRoundTripsThroughScreenFrameLookup() {
+        let main = NSRect(x: 0, y: 0, width: 1000, height: 800)
+        let secondary = NSRect(x: 1000, y: 0, width: 600, height: 400)
+        let screens = [
+            (id: OverlayController.identifiedID(stableDisplayID: nil, index: 0), frame: main),
+            (id: OverlayController.identifiedID(stableDisplayID: "uuid-123", index: 1), frame: secondary),
+        ]
+        let frame = OverlayController.screenFrame(forDisplayID: "uuid-123", in: screens)
+        #expect(frame == secondary)
+    }
+
     @Test
     func targetScreenFrameUsesMainScreenWhenNoSavedOrigin() {
         let main = NSRect(x: 0, y: 0, width: 1000, height: 800)
