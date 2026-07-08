@@ -2,11 +2,12 @@ import Foundation
 
 // 表示層の共通ヘルパー。純関数のみ (テストと eval が同一実装を共有する)
 enum DisplayFormatting {
-    // 追従訳末尾の書き換えを画面から隠す (Google の mask-k)。CJK 主体は末尾 k 文字、
-    // 非 CJK は空白で区切った末尾 k トークンを切り落とす。k <= 0 は元テキストを返す
+    // 追従訳末尾の書き換えを画面から隠す (Google の mask-k)。CJK 文字を含めば
+    // 末尾 k 文字、含まなければ空白で区切った末尾 k トークンを切り落とす。
+    // k <= 0 は元テキストを返す
     static func maskVolatileTail(text: String, k: Int) -> String {
         guard k > 0, !text.isEmpty else { return text }
-        if isCJKDominant(text) {
+        if containsCJK(text) {
             return maskCJKTail(text: text, k: k)
         }
         return maskWordTail(text: text, k: k)
@@ -17,19 +18,14 @@ enum DisplayFormatting {
         text.count - maskVolatileTail(text: text, k: k).count
     }
 
-    // 表意文字・かな・ハングルが非空白文字の過半数を占めるとき CJK 主体扱い。
-    // Character 単位で数える (分解形かなの結合文字 U+3099 等が独立の可視文字として
-    // 数えられて CJK 比率を過小評価するのを防ぐ)
-    private static func isCJKDominant(_ text: String) -> Bool {
-        var visible = 0
-        var cjk = 0
+    // CJK 文字が 1 つでも含まれるか (mixed-script 対策)。"OpenAIについて" の
+    // ような Latin 過半 + CJK 混じりを word-based で扱うと空白なし CJK でトークン
+    // 数 1 として全消去されるため、CJK 混在は保守的に char-based へ落とす
+    private static func containsCJK(_ text: String) -> Bool {
         for character in text {
-            if character.unicodeScalars.allSatisfy({ $0.properties.isWhitespace }) { continue }
-            visible += 1
-            if character.unicodeScalars.contains(where: isCJK) { cjk += 1 }
+            if character.unicodeScalars.contains(where: isCJK) { return true }
         }
-        guard visible > 0 else { return false }
-        return cjk * 2 > visible
+        return false
     }
 
     private static func isCJK(_ scalar: Unicode.Scalar) -> Bool {

@@ -69,7 +69,7 @@ struct DisplayFormattingTests {
     }
 
     @Test
-    func maskTreatsMixedCJKMajoritatedAsCharBased() {
+    func maskTreatsMixedCJKAsCharBased() {
         // 少数の記号・数字を含む CJK 文は文字単位で刈る (Latin 判定に倒れない)
         #expect(
             DisplayFormatting.maskVolatileTail(text: "会議は3件あります", k: 2)
@@ -77,10 +77,11 @@ struct DisplayFormattingTests {
     }
 
     @Test
-    func maskTreatsMixedLatinMajoritatedAsWordBased() {
-        // Latin 文字が過半なら単語単位 (少数 CJK が混じっても Latin 側に倒れる)
-        #expect(
-            DisplayFormatting.maskVolatileTail(text: "hello 世界 world", k: 1) == "hello 世界")
+    func maskTreatsMixedScriptWithCJKAsCharBased() {
+        // Latin 過半 + CJK 混じりは char-based に落とす (word-based だと空白なし
+        // CJK 文字列で全消去される regression 防止。例: "OpenAIについて")
+        #expect(DisplayFormatting.maskVolatileTail(text: "OpenAIについて", k: 2) == "OpenAIにつ")
+        #expect(DisplayFormatting.maskVolatileTail(text: "hello 世界 world", k: 1) == "hello 世界 worl")
     }
 
     // 分解形かな (base + combining voiced mark) は 1 Character として数え、
