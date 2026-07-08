@@ -481,7 +481,8 @@ struct SegmentationEvaluationTests {
         let sourceErasedChars: Int
         let translationErasedChars: Int?
         // key は k (0/1/2/3)。maskedTranslationErasedByK[0] は translationErasedChars と一致。
-        // maskedTranslationDelayCharsByK は最終確定訳長と mask 適用後の長さの差 (表示遅延)
+        // maskedTranslationDelayCharsByK は最後の volatile 訳が mask で隠していた
+        // 末尾長 (final 到着で復元される分) の総和
         let maskedTranslationErasedByK: [Int: Int]?
         let maskedTranslationDelayCharsByK: [Int: Int]?
         let finalTexts: [String]
@@ -581,10 +582,8 @@ struct SegmentationEvaluationTests {
                             return DisplayFormatting.maskVolatileTail(text: text, k: k)
                         }
                         maskedErased[k, default: 0] += EvalMetrics.erasedCharacters(updates: maskedRun)
-                        let maskedLastVolatileLen = DisplayFormatting.maskVolatileTail(
-                            text: lastVolatile, k: k
-                        ).count
-                        maskedDelay[k, default: 0] += max(0, lastVolatile.count - maskedLastVolatileLen)
+                        maskedDelay[k, default: 0] += DisplayFormatting.maskedTailLength(
+                            text: lastVolatile, k: k)
                     }
                 }
                 translatedTexts = translations
