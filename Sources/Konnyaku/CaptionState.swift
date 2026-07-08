@@ -8,6 +8,10 @@ final class CaptionState {
     static let maxTranslatedLines = 3
     // 発表の聞き手が読み終える猶予
     static let lineLifetime: TimeInterval = 10
+    // 追従訳末尾の書き換えを画面から隠す文字/語数 (Google の mask-k、内部状態は
+    // 生値のまま表示層のみに適用)。現在は 0 (無効) — eval で k=1/2/3 の erasure を
+    // 測ってから本番値を上げる
+    static let volatileTailMaskK = 0
 
     struct Line {
         var text: String
@@ -58,7 +62,11 @@ final class CaptionState {
             DisplayLine(id: offset, text: line.text, kind: .final)
         }
         if !volatileTranslation.isEmpty {
-            lines.append(DisplayLine(id: lines.count, text: volatileTranslation, kind: .volatile))
+            let masked = DisplayFormatting.maskVolatileTail(
+                text: volatileTranslation, k: Self.volatileTailMaskK)
+            if !masked.isEmpty {
+                lines.append(DisplayLine(id: lines.count, text: masked, kind: .volatile))
+            }
         }
         return lines
     }
