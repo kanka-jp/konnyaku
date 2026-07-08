@@ -17,15 +17,16 @@ enum DisplayFormatting {
         text.count - maskVolatileTail(text: text, k: k).count
     }
 
-    // 表意文字・かな・ハングルが非空白文字の過半数を占めるとき CJK 主体扱い
-    // (少数の記号「」・ が混じっても判定が Latin 側に倒れないため)
+    // 表意文字・かな・ハングルが非空白文字の過半数を占めるとき CJK 主体扱い。
+    // Character 単位で数える (分解形かなの結合文字 U+3099 等が独立の可視文字として
+    // 数えられて CJK 比率を過小評価するのを防ぐ)
     private static func isCJKDominant(_ text: String) -> Bool {
         var visible = 0
         var cjk = 0
-        for scalar in text.unicodeScalars {
-            if scalar.properties.isWhitespace { continue }
+        for character in text {
+            if character.unicodeScalars.allSatisfy({ $0.properties.isWhitespace }) { continue }
             visible += 1
-            if isCJK(scalar) { cjk += 1 }
+            if character.unicodeScalars.contains(where: isCJK) { cjk += 1 }
         }
         guard visible > 0 else { return false }
         return cjk * 2 > visible

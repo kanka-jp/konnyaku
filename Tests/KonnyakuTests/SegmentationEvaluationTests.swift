@@ -570,16 +570,21 @@ struct SegmentationEvaluationTests {
                     }
                     erased += EvalMetrics.erasedCharacters(updates: translatedRun)
 
-                    // run ごとの mask-k erasure と、確定訳末尾の mask で隠される長さ
-                    // (表示遅延) を集計する
-                    let finalLen = translatedRun.last?.count ?? 0
+                    // production は volatile のみ mask し final は unmask 表示するため、
+                    // 末尾要素 (final) を mask せず erasure に流し、表示遅延は最後の
+                    // volatile の mask 隠し長 (final 到着で復元される分) で数える
+                    let lastIndex = translatedRun.indices.last
+                    let lastVolatile = translatedRun.dropLast().last ?? ""
                     for k in Self.maskCandidates {
-                        let maskedRun = translatedRun.map {
-                            DisplayFormatting.maskVolatileTail(text: $0, k: k)
+                        let maskedRun = translatedRun.enumerated().map { index, text -> String in
+                            if let lastIndex, index == lastIndex { return text }
+                            return DisplayFormatting.maskVolatileTail(text: text, k: k)
                         }
                         maskedErased[k, default: 0] += EvalMetrics.erasedCharacters(updates: maskedRun)
-                        let maskedFinalLen = maskedRun.last?.count ?? 0
-                        maskedDelay[k, default: 0] += max(0, finalLen - maskedFinalLen)
+                        let maskedLastVolatileLen = DisplayFormatting.maskVolatileTail(
+                            text: lastVolatile, k: k
+                        ).count
+                        maskedDelay[k, default: 0] += max(0, lastVolatile.count - maskedLastVolatileLen)
                     }
                 }
                 translatedTexts = translations
@@ -679,9 +684,23 @@ struct SegmentationEvaluationTests {
         // と表示遅延 (delay 増) の trade-off を可視化する
         print("----- mask-k sweep (全 record 合計、erased/delay chars) -----")
         for k in Self.maskCandidates {
-            let erased = records.compactMap { $0.maskedTranslationErasedByK?[k] }.reduce(0, +)
-            let delay = records.compactMap { $0.maskedTranslationDelayCharsByK?[k] }.reduce(0, +)
-            print("k=\(k): erased=\(erased) delay=\(delay)")
+            // 翻訳系メトリクスが nil の record を 0 として集計すると欠測が
+            // "計算できた 0" に見えるため、有効な record のみ合算する
+            let metrics = records.compactMap { record -> (erased: Int, delay: Int)? in
+                guard let erased = record.maskedTranslationErasedByK?[k],
+                    let delay = record.maskedTranslationDelayCharsByK?[k]
+                else { return nil }
+                return (erased, delay)
+            }
+            guard !metrics.isEmpty else {
+                print("k=\(k): erased=- delay=- records=0/\(records.count)")
+                continue
+            }
+            let erased = metrics.reduce(0) { $0 + $1.erased }
+            let delay = metrics.reduce(0) { $0 + $1.delay }
+            print(
+                "k=\(k): erased=\(erased) delay=\(delay) "
+                    + "records=\(metrics.count)/\(records.count)")
         }
         print("===== KONNYAKU_EVAL segmentation 終了 =====")
     }

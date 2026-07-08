@@ -83,6 +83,15 @@ struct DisplayFormattingTests {
             DisplayFormatting.maskVolatileTail(text: "hello 世界 world", k: 1) == "hello 世界")
     }
 
+    // 分解形かな (base + combining voiced mark) は 1 Character として数え、
+    // CJK 比率に混ぜる (unicodeScalars 単位だと結合文字を独立の可視文字として
+    // 誤カウントし CJK 過小評価になり、日本語が maskWordTail 経由で全消去される)
+    @Test
+    func maskTreatsDecomposedKanaAsSingleCJKCharacter() {
+        let decomposed = "\u{304B}\u{3099}\u{304D}\u{3099}\u{304F}\u{3099}"
+        #expect(DisplayFormatting.maskVolatileTail(text: decomposed, k: 1) == "\u{304B}\u{3099}\u{304D}\u{3099}")
+    }
+
     @Test
     func maskedTailLengthMatchesRemovedCharacters() {
         // 表示遅延メトリクスは元テキストと mask 済みテキストの差で数える
