@@ -470,6 +470,7 @@ struct OverlayControllerTests {
     // resetFrame を経由してメインディスプレイへのフォールバックを即座に反映する契約
     @Test @MainActor
     func applyPreferredDisplayChangeToAutomaticMovesExistingPanelToMainWhenNoSavedOrigin() throws {
+        // CI runner に WindowServer が無い場合 show() は panel を作れないため対象外
         guard let mainScreen = NSScreen.main else { return }
         let defaults = UserDefaults.standard
         defaults.removeObject(forKey: OverlayController.originXKey)
