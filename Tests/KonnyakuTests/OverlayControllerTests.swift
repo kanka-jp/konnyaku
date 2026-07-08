@@ -361,6 +361,10 @@ struct OverlayControllerTests {
         defaults.removeObject(forKey: OverlayController.originYKey)
         defaults.set(600.0, forKey: OverlayController.widthKey)
         defaults.set(300.0, forKey: OverlayController.heightKey)
+        defer {
+            defaults.removeObject(forKey: OverlayController.widthKey)
+            defaults.removeObject(forKey: OverlayController.heightKey)
+        }
 
         OverlayController().applyPreferredDisplayChange(id: nil, fontScale: 1.0)
 
