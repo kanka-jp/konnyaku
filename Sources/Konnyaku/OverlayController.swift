@@ -21,11 +21,14 @@ final class OverlayController: NSObject, NSWindowDelegate {
     }
 
     // stableDisplayID が無い、または他モニターと重複するモニターは選択肢から除外する
-    // (未解決 ID は復元先を保証できず、重複 ID は SwiftUI ForEach の一意性契約を破る)
+    // (未解決 ID は復元先不定、重複 ID は screenFrame の first(where:) 解決が順序依存になるため全除外)
     static func availableDisplays() -> [DisplayOption] {
-        var seenIDs = Set<String>()
+        let idCounts = NSScreen.screens.reduce(into: [String: Int]()) { counts, screen in
+            guard let stableID = screen.stableDisplayID else { return }
+            counts[stableID, default: 0] += 1
+        }
         return NSScreen.screens.compactMap { screen in
-            guard let stableID = screen.stableDisplayID, seenIDs.insert(stableID).inserted else {
+            guard let stableID = screen.stableDisplayID, idCounts[stableID] == 1 else {
                 return nil
             }
             return DisplayOption(id: stableID, name: screen.localizedName)

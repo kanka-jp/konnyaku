@@ -99,7 +99,14 @@ struct SettingsView: View {
 
                 VStack(alignment: .leading, spacing: 6) {
                     Picker(t("settings.display_screen"), selection: Binding(
-                        get: { controller.settings.preferredDisplayID ?? "" },
+                        get: {
+                            // 保存済み ID が未接続の場合は Picker タグ不一致を避け「自動」表示
+                            // (設定値自体は保持し、再接続時に resetFrame/show 側で自動復元される)
+                            guard let id = controller.settings.preferredDisplayID,
+                                controller.availableDisplays.contains(where: { $0.id == id })
+                            else { return "" }
+                            return id
+                        },
                         set: { controller.setPreferredDisplay($0.isEmpty ? nil : $0) }
                     )) {
                         Text(t("settings.display_screen.auto")).tag("")
