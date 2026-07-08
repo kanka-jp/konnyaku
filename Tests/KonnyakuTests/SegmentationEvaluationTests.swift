@@ -577,7 +577,13 @@ struct SegmentationEvaluationTests {
                     // 破棄セグメント (run.last == "") は production の discardVolatileSegment
                     // で mask 隠し末尾が復元されず消えるだけなので delay 計上対象外
                     let lastIndex = translatedRun.indices.last
-                    let lastVolatile = translatedRun.dropLast().last ?? ""
+                    // dedup で final と volatile が collapse された (translatedRun が 1 要素)
+                    // ケースは、その要素が両方の役割を担う (production は mask 表示 → final
+                    // unmask 表示の遷移を経るため delay 対象)
+                    let lastVolatile =
+                        translatedRun.count == 1
+                        ? (translatedRun.last ?? "")
+                        : (translatedRun.dropLast().last ?? "")
                     let volatileWillBeRestored = run.last != ""
                     for k in Self.maskCandidates {
                         let maskedRun = translatedRun.enumerated().map { index, text -> String in
