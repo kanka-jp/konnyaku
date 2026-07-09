@@ -46,7 +46,9 @@ final class CaptionPipeline {
     private var pendingFinalTextsAwaitingCorrectionDrain: [(text: String, generation: Int)] = []
     private var correctionBacklog = 0
     private var segmentThreshold = CaptionPipeline.latinSegmentThreshold
-    private let segmentationPolicy: SegmentationPolicy = .current
+    // clauseAware の節境界規則は日本語表層形 (接続助詞・て形等) 依存のため日本語入力のみ適用。
+    // 他言語では tail 句読点 window ベースの current を継続 (他言語未評価のため conservative)
+    private var segmentationPolicy: SegmentationPolicy = .current
     private var forcedFinalizeInFlight = false
     // pauseAware のポーズ判定入力 (audio 供給時刻と最新結果の audio 終端)。
     // .current 運用では参照されないが観測値として常に更新する。判定は認識結果の
@@ -90,6 +92,7 @@ final class CaptionPipeline {
         segmentThreshold = (languageCode == .japanese || languageCode == .chinese || languageCode == .korean)
             ? Self.cjkSegmentThreshold
             : Self.latinSegmentThreshold
+        segmentationPolicy = languageCode == .japanese ? .clauseAware : .current
         forcedFinalizeInFlight = false
 
         audioFeedClock.reset()

@@ -146,7 +146,11 @@ struct CaptionStateTests {
         state.appendTranslation("First.", generation: 0)
         let generation = state.volatileGeneration
         state.setVolatileTranslation("typing...", generation: generation)
-        #expect(state.translationDisplayLines.map(\.text) == ["First.", "typing..."])
+        #expect(state.translatedLines.map(\.text) == ["First."])
+        #expect(state.volatileTranslation == "typing...")
+        // volatileTailMaskK = 1 で "typing..." (1 token) は mask 後空になり volatile 行を出さない
+        // (`masked.isEmpty` guard の regression 防止。guard 消失なら "typing..." が表示される)
+        #expect(state.translationDisplayLines.map(\.text) == ["First."])
 
         // 文の確定 (世代が進む) 後に届いた同世代の確定訳が追従訳を置き換える
         state.appendFinalSource("確定文")
@@ -154,8 +158,8 @@ struct CaptionStateTests {
         #expect(state.translationDisplayLines.map(\.text) == ["First.", "Second."])
     }
 
-    // 文確定の瞬間に追従訳を消さず、自分の確定訳の到着まで placeholder として残す
-    // (確定〜確定訳到着の間に下段が一瞬空になる regression の防止)。
+    // 文確定の瞬間に volatileTranslation の生値を消さず、自分の確定訳の到着まで placeholder
+    // として保持する (生状態の一時空を防ぐ。表示は mask k>0 では masked 空で行を出さない)。
     // 次の文の追従訳が先に届いた場合はそちらが優先して上書きする (追従スロットは 1 つ)。
     // 10 秒無更新なら pruneExpired が先に消す (確定訳到着までの無期限保証ではない)
     @Test
@@ -164,7 +168,8 @@ struct CaptionStateTests {
         let generation = state.volatileGeneration
         state.setVolatileTranslation("half sentence...", generation: generation)
         state.appendFinalSource("確定文")
-        #expect(state.translationDisplayLines.map(\.text) == ["half sentence..."])
+        #expect(state.translatedLines.isEmpty)
+        #expect(state.volatileTranslation == "half sentence...")
 
         state.appendTranslation("Real translation.", generation: generation)
         #expect(state.translationDisplayLines.map(\.text) == ["Real translation."])
@@ -182,7 +187,8 @@ struct CaptionStateTests {
 
         // 文 A の確定訳が遅れて到着
         state.appendTranslation("A final.", generation: generationA)
-        #expect(state.translationDisplayLines.map(\.text) == ["A final.", "B typing..."])
+        #expect(state.translatedLines.map(\.text) == ["A final."])
+        #expect(state.volatileTranslation == "B typing...")
     }
 
     // 文 B の確定後に文 A の確定訳が届いても B の追従訳は残り、B 自身の確定訳で置き換わる
@@ -197,7 +203,8 @@ struct CaptionStateTests {
         state.appendFinalSource("文B")
 
         state.appendTranslation("A final.", generation: generationA)
-        #expect(state.translationDisplayLines.map(\.text) == ["A final.", "B typing..."])
+        #expect(state.translatedLines.map(\.text) == ["A final."])
+        #expect(state.volatileTranslation == "B typing...")
 
         state.appendTranslation("B final.", generation: generationB)
         #expect(state.translationDisplayLines.map(\.text) == ["A final.", "B final."])
@@ -230,7 +237,8 @@ struct CaptionStateTests {
         state.appendFinalSource("文A")
 
         state.discardVolatileSegment()
-        #expect(state.translationDisplayLines.map(\.text) == ["A typing..."])
+        #expect(state.translatedLines.isEmpty)
+        #expect(state.volatileTranslation == "A typing...")
 
         state.appendTranslation("A final.", generation: generationA)
         #expect(state.translationDisplayLines.map(\.text) == ["A final."])
@@ -273,9 +281,10 @@ struct CaptionStateTests {
         state.appendFinalSource("確定文")
         state.setVolatileTranslation("stale", generation: generation)
         #expect(state.translationDisplayLines.isEmpty)
+        #expect(state.volatileTranslation.isEmpty)
 
         state.setVolatileTranslation("fresh", generation: state.volatileGeneration)
-        #expect(state.translationDisplayLines.map(\.text) == ["fresh"])
+        #expect(state.volatileTranslation == "fresh")
     }
 
     @Test
@@ -285,10 +294,11 @@ struct CaptionStateTests {
         state.setVolatileTranslation("typing...", generation: state.volatileGeneration, at: base)
 
         state.pruneExpired(now: base.addingTimeInterval(CaptionState.lineLifetime - 1))
-        #expect(state.translationDisplayLines.map(\.text) == ["typing..."])
+        #expect(state.volatileTranslation == "typing...")
 
         state.pruneExpired(now: base.addingTimeInterval(CaptionState.lineLifetime + 1))
         #expect(state.translationDisplayLines.isEmpty)
+        #expect(state.volatileTranslation.isEmpty)
     }
 
     @Test
